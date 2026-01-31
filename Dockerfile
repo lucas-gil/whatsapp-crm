@@ -6,14 +6,13 @@ RUN apk add --no-cache dumb-init
 
 COPY . .
 
-# Entrar na pasta backend E fazer build
 WORKDIR /app/backend
 
-RUN npm install --legacy-peer-deps 2>&1 || true
+# Instalar dependências
+RUN npm install --legacy-peer-deps
 
-RUN npm run build 2>&1 || echo "Build falhou"
-
-RUN ls -la /app/backend/dist || echo "dist não existe"
+# Instalar ts-node para rodar TypeScript direto
+RUN npm install -g ts-node typescript
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
@@ -25,4 +24,5 @@ USER nodejs
 EXPOSE 3000
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/main"]
+# Roda o TypeScript direto sem precisar fazer build
+CMD ["ts-node", "src/main.ts"]
