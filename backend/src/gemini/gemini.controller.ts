@@ -16,17 +16,17 @@ export class GeminiController {
   constructor(private geminiService: GeminiService) {}
 
   @Get()
-  async getSettings(@Request() req) {
+  async getSettings(@Request() req: any) {
     return this.geminiService.getSettings(req.user.workspaceId);
   }
 
   @Post()
-  async updateSettings(@Body() data: any, @Request() req) {
+  async updateSettings(@Body() data: any, @Request() req: any) {
     return this.geminiService.updateSettings(req.user.workspaceId, data);
   }
 
   @Post('test')
-  async testConnection(@Body('message') message: string, @Request() req) {
+  async testConnection(@Body('message') message: string, @Request() req: any) {
     const reply = await this.geminiService.generateReply(
       req.user.workspaceId,
       'Test User',

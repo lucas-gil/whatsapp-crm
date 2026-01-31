@@ -3,5 +3,5 @@ import { LicenseType } from '@prisma/client';
 
 export class CreateLicenseDto {
   @IsEnum(LicenseType)
-  type: LicenseType;
+  type!: LicenseType;
 }

@@ -18,7 +18,10 @@ export class ConversationsController {
   constructor(private conversationsService: ConversationsService) {}
 
   @Get()
-  async listConversations(@Query('status') status?: string, @Request() req) {
+  async listConversations(
+    @Query('status') status: string | undefined,
+    @Request() req: any,
+  ) {
     return this.conversationsService.listConversations(
       req.user.workspaceId,
       { status },
@@ -26,12 +29,16 @@ export class ConversationsController {
   }
 
   @Get(':id')
-  async getConversation(@Param('id') id: string, @Request() req) {
+  async getConversation(@Param('id') id: string, @Request() req: any) {
     return this.conversationsService.getConversation(req.user.workspaceId, id);
   }
 
   @Post(':id/messages')
-  async sendMessage(@Param('id') id: string, @Body() data: any, @Request() req) {
+  async sendMessage(
+    @Param('id') id: string,
+    @Body() data: any,
+    @Request() req: any,
+  ) {
     return this.conversationsService.sendMessage(req.user.workspaceId, id, data);
   }
 

@@ -35,11 +35,11 @@ export class QueueService {
     });
 
     // Listeners
-    worker.on('completed', (job) => {
+    worker.on('completed', (job: any) => {
       this.logger.info(`✅ Job ${job.id} concluído`);
     });
 
-    worker.on('failed', (job, err) => {
+    worker.on('failed', (job: any, err: any) => {
       this.logger.error(`❌ Job ${job.id} falhou: ${err.message}`);
     });
 

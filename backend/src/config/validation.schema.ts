@@ -1,5 +1,15 @@
 import * as Joi from 'joi';
 
+export const validate = (config: Record<string, any>) => {
+  const { error, value } = validationSchema.validate(config, {
+    allowUnknown: true,
+  });
+  if (error) {
+    throw new Error(`Config validation error: ${error.message}`);
+  }
+  return value;
+};
+
 export const validationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
