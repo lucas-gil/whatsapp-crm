@@ -36,6 +36,7 @@ COPY --from=builder --chown=nodejs:nodejs /app/frontend/node_modules ./node_modu
 COPY --from=builder --chown=nodejs:nodejs /app/frontend/.next ./.next
 COPY --from=builder --chown=nodejs:nodejs /app/frontend/public ./public
 COPY --from=builder --chown=nodejs:nodejs /app/frontend/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/.env.production ./.env.production
 
 USER nodejs
 
