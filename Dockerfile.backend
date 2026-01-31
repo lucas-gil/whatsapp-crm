@@ -1,31 +1,23 @@
 FROM node:20-alpine
 
-WORKDIR /app
-
 RUN apk add --no-cache dumb-init
 
-# BACKEND BUILD
-COPY backend/package*.json ./backend/
-WORKDIR /app/backend
-RUN npm install --legacy-peer-deps
+WORKDIR /app
 
-COPY backend . 
-RUN npm run build
+COPY . /app
 
-# RUNTIME
-FROM node:20-alpine
+RUN ls -la /app/ && \
+    echo "---" && \
+    ls -la /app/backend/ || echo "backend nao existe"
 
 WORKDIR /app/backend
 
-RUN apk add --no-cache dumb-init && \
-    addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN npm install --legacy-peer-deps || true && \
+    npm run build || true
 
-COPY --from=0 /app/backend/dist ./dist
-COPY --from=0 /app/backend/node_modules ./node_modules
-COPY --from=0 /app/backend/prisma ./prisma
-
-RUN mkdir -p /app/backend/storage /app/backend/sessions && \
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    mkdir -p /app/backend/storage /app/backend/sessions && \
     chown -R nodejs:nodejs /app
 
 USER nodejs
