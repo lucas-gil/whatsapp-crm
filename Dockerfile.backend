@@ -4,16 +4,21 @@ RUN apk add --no-cache dumb-init
 
 WORKDIR /app
 
-COPY . /app
+# Copiar TUDO
+COPY . .
 
-RUN ls -la /app/ && \
-    echo "---" && \
-    ls -la /app/backend/ || echo "backend nao existe"
-
-WORKDIR /app/backend
-
-RUN npm install --legacy-peer-deps || true && \
-    npm run build || true
+# VER O QUE TEM
+RUN echo "=== CONTEÚDO DE /app ===" && \
+    ls -la /app && \
+    echo "=== CONTEÚDO DE /app/backend ===" && \
+    ls -la /app/backend && \
+    echo "=== TENTANDO BUILD ===" && \
+    cd /app/backend && \
+    pwd && \
+    npm install --legacy-peer-deps && \
+    npm run build && \
+    echo "=== BUILD OK ===" && \
+    ls -la /app/backend/dist
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
@@ -25,4 +30,4 @@ USER nodejs
 EXPOSE 3000
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/main"]
+CMD ["node", "/app/backend/dist/main"]
