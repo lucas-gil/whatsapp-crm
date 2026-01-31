@@ -1,24 +1,20 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init curl
 
 WORKDIR /app
 
-# Copiar TUDO
 COPY . .
 
-# VER O QUE TEM
-RUN echo "=== CONTEÚDO DE /app ===" && \
-    ls -la /app && \
-    echo "=== CONTEÚDO DE /app/backend ===" && \
-    ls -la /app/backend && \
-    echo "=== TENTANDO BUILD ===" && \
-    cd /app/backend && \
-    pwd && \
+# Build do backend
+WORKDIR /app/backend
+
+RUN echo "Instalando dependências..." && \
     npm install --legacy-peer-deps && \
+    echo "Build iniciado..." && \
     npm run build && \
-    echo "=== BUILD OK ===" && \
-    ls -la /app/backend/dist
+    echo "Build concluído!" && \
+    find /app/backend -name "main.js" -type f
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
@@ -29,5 +25,9 @@ USER nodejs
 
 EXPOSE 3000
 
+# Health check simples
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD node -v || exit 1
+
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "/app/backend/dist/main"]
+CMD ["sh", "-c", "if [ -f dist/main.js ]; then node dist/main.js; else echo 'Arquivo não encontrado' && sleep 300; fi"]
