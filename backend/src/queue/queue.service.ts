@@ -76,7 +76,7 @@ export class QueueService {
     if (!job) return null;
 
     const state = await job.getState();
-    const progress = job.progress();
+    const progress = job.progress;
 
     return { id: job.id, state, progress };
   }
