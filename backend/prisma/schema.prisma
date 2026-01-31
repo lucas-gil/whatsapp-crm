@@ -1,0 +1,503 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== WORKSPACE / TENANT ==========
+model Workspace {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  licenseKeys   LicenseKey[]
+  sessions      UserSession[]
+  leads         Lead[]
+  conversations Conversation[]
+  messages      Message[]
+  tags          Tag[]
+  groups        Group[]
+  templates     Template[]
+  broadcasts    Broadcast[]
+  geminiSettings GeminiSettings?
+  whatsappSettings WhatsAppSettings?
+
+  @@index([slug])
+}
+
+// ========== LICENSE / AUTHENTICATION ==========
+enum LicenseType {
+  TEMPORARY_12MIN
+  TEMPORARY_30DAYS
+  ADMIN_INFINITE
+}
+
+model LicenseKey {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // Hash da chave (nunca texto puro)
+  keyHash         String      @unique
+  keyPreview      String      // ex: "key_abc123...xyz" (primeiros e últimos chars)
+  
+  type            LicenseType
+  expiresAt       DateTime?   // null = infinita
+  activatedAt     DateTime?   // quando foi usado pela primeira vez
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?   @db.Timestamp
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  sessions        UserSession[]
+  auditLogs       AuditLog[]
+
+  @@index([workspaceId])
+  @@index([keyHash])
+  @@index([expiresAt])
+}
+
+model UserSession {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  licenseKeyId    String
+  licenseKey      LicenseKey  @relation(fields: [licenseKeyId], references: [id], onDelete: Cascade)
+  
+  jwtToken        String      @unique
+  jwtExpiresAt    DateTime
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  expiresAt       DateTime    // session timeout
+
+  @@index([workspaceId])
+  @@index([licenseKeyId])
+  @@index([expiresAt])
+}
+
+// ========== WHATSAPP SETTINGS / CONNECTION ==========
+model WhatsAppSettings {
+  id              String      @id @default(cuid())
+  workspaceId     String      @unique
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  provider        String      @default("web-qr") // "web-qr" ou "cloud-api"
+  
+  // Web QR Config
+  sessionName     String?     // nome da sessão para Baileys
+  sessionPath     String?     // caminho persistido
+  
+  // Cloud API Config
+  cloudApiToken   String?     // Bearer token para WhatsApp Cloud API
+  cloudApiPhoneId String?     // Phone ID do negócio
+  cloudApiWebhookUrl String?  // Webhook para receber mensagens
+  
+  // Status
+  isConnected     Boolean     @default(false)
+  lastConnectedAt DateTime?
+  lastDisconnectReason String?
+  
+  // Opt-in/opt-out config
+  requireOptIn    Boolean     @default(true)
+  defaultOptInStatus Boolean  @default(true)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([workspaceId])
+}
+
+// ========== CRM: LEADS ==========
+model Lead {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // Dados do contato
+  name            String
+  phoneNumber     String      // número do WhatsApp (sem formatação)
+  email           String?
+  avatarUrl       String?
+  
+  // CRM Info
+  pipelineStage   String      @default("novo") // novo, qualificando, proposta, fechado, perdido
+  responsibleUser String?     // email ou ID do responsável
+  origin          String?     // fonte do lead: contato direto, anúncio, referência, etc
+  
+  // Compliance
+  optIn           Boolean     @default(true)
+  optInDate       DateTime?
+  optOutDate      DateTime?
+  optOutReason    String?
+  
+  // Dados adicionais
+  customFields    Json?       // dados customizados do cliente
+  notes           String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  tags            LeadTag[]
+  conversations   Conversation[]
+  broadcasts      BroadcastRecipient[]
+
+  @@unique([workspaceId, phoneNumber])
+  @@index([workspaceId])
+  @@index([pipelineStage])
+  @@index([optIn])
+}
+
+// ========== TAGS ==========
+model Tag {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  name            String
+  color           String      @default("#007AFF")
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  leads           LeadTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model LeadTag {
+  id              String      @id @default(cuid())
+  leadId          String
+  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  tagId           String
+  tag             Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, tagId])
+  @@index([leadId])
+  @@index([tagId])
+}
+
+// ========== CONVERSATIONS ==========
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  CLOSED
+}
+
+model Conversation {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  leadId          String
+  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  groupId         String?     // se for mensagem de grupo
+  group           Group?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  status          ConversationStatus @default(ACTIVE)
+  isPinned        Boolean     @default(false)
+  
+  lastMessageAt   DateTime    @default(now())
+  lastMessage     String?     // preview da última mensagem
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  messages        Message[]
+
+  @@unique([workspaceId, leadId, groupId]) // permite múltiplas conversas: 1:1 e grupo
+  @@index([workspaceId])
+  @@index([leadId])
+  @@index([groupId])
+  @@index([lastMessageAt])
+}
+
+// ========== MESSAGES ==========
+enum MessageStatus {
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+model Message {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Conteúdo
+  text            String?
+  type            String      @default("text") // text, image, audio, video, document, poll
+  
+  // Status
+  direction       MessageDirection
+  status          MessageStatus @default(SENDING)
+  whatsappMessageId String?    // ID do WhatsApp (para rastrear)
+  
+  // IA
+  wasProcessedByAI Boolean     @default(false)
+  aiResponse      String?     // resposta da IA se houver
+  
+  // Metadata
+  senderPhoneNumber String?    // para incoming
+  senderName      String?     // para incoming
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  attachments     Attachment[]
+
+  @@index([workspaceId])
+  @@index([conversationId])
+  @@index([direction])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ========== ATTACHMENTS ==========
+model Attachment {
+  id              String      @id @default(cuid())
+  messageId       String
+  message         Message     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  fileName        String
+  fileType        String      // image/png, audio/mp3, etc
+  fileSizeBytes   Int
+  
+  // Storage
+  storageProvider String      @default("local") // local, s3, minio
+  storagePath     String      // caminho ou key no storage
+  publicUrl       String?     // URL pública se disponível
+  
+  // Metadata
+  width           Int?        // para imagens/vídeos
+  height          Int?
+  duration        Int?        // segundos, para áudio/vídeo
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([messageId])
+  @@index([storageProvider])
+}
+
+// ========== GROUPS ==========
+model Group {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  whatsappGroupId String?     // ID do grupo no WhatsApp
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  conversations   Conversation[]
+  broadcasts      BroadcastRecipient[]
+
+  @@index([workspaceId])
+  @@index([whatsappGroupId])
+}
+
+// ========== TEMPLATES ==========
+model Template {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  name            String
+  category        String      // mensagem, saudação, suporte, etc
+  content         String      // com suporte a {{variavel}}
+  
+  variables       String[]    // ["nome", "cidade", "produto"]
+  attachmentUrl   String?
+  
+  isActive        Boolean     @default(true)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// ========== BROADCASTS / MASS SENDING ==========
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+model Broadcast {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  name            String
+  message         String      // conteúdo com variáveis {{}}
+  templateId      String?     // ID do template se usar
+  
+  status          BroadcastStatus @default(DRAFT)
+  
+  // Segmentação
+  tagFilter       String[]    // enviar para leads com essas tags
+  stageFilter     String?     // enviar para leads em determinada etapa
+  
+  // Rate limiting
+  messagesPerMinute Int       @default(20)
+  
+  // Agendamento
+  scheduledFor    DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  // Estatísticas
+  totalRecipients Int         @default(0)
+  sentCount       Int         @default(0)
+  failedCount     Int         @default(0)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  recipients      BroadcastRecipient[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+enum BroadcastRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  OPTED_OUT
+  INVALID_NUMBER
+}
+
+model BroadcastRecipient {
+  id              String      @id @default(cuid())
+  broadcastId     String
+  broadcast       Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  
+  leadId          String?
+  lead            Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  
+  groupId         String?
+  group           Group?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  phoneNumber     String      // número de destino
+  
+  status          BroadcastRecipientStatus @default(PENDING)
+  sentAt          DateTime?
+  failureReason   String?
+  
+  variables       Json?       // variáveis renderizadas
+
+  @@unique([broadcastId, phoneNumber])
+  @@index([broadcastId])
+  @@index([status])
+}
+
+// ========== GEMINI SETTINGS ==========
+model GeminiSettings {
+  id              String      @id @default(cuid())
+  workspaceId     String      @unique
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  isEnabled       Boolean     @default(false)
+  apiKey          String      // será criptografado em produção
+  
+  systemPrompt    String      @db.Text // prompt do cliente descrevendo como a IA deve agir
+  
+  // Contextual files (opcional)
+  contextFiles    String[]    // IDs de attachments ou URLs para dar contexto
+  
+  // Comportamento
+  respondToAllMessages Boolean @default(false) // se false, responde apenas em determinadas condições
+  confidenceThreshold Float?   // confiança mínima para responder
+  
+  // Rules por etapa do funil
+  rules           Json?       // { "novo": "...", "proposta": "..." }
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([workspaceId])
+}
+
+// ========== AUDIT LOG ==========
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE_LEAD
+  UPDATE_LEAD
+  DELETE_LEAD
+  SEND_MESSAGE
+  BROADCAST_START
+  BROADCAST_STOP
+  GEMINI_ENABLED
+  LICENSE_CREATED
+  LICENSE_REVOKED
+  SETTINGS_UPDATED
+  FILE_UPLOADED
+  CONTACT_OPTED_OUT
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  
+  licenseKeyId    String?
+  licenseKey      LicenseKey? @relation(fields: [licenseKeyId], references: [id], onDelete: SetNull)
+  
+  action          AuditAction
+  resourceType    String?     // "Lead", "Message", "Broadcast", etc
+  resourceId      String?
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  details         Json?       // dados específicos da ação
+  
+  createdAt       DateTime    @default(now())
+
+  @@index([licenseKeyId])
+  @@index([action])
+  @@index([createdAt])
+}

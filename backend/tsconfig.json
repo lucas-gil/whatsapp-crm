@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["./*"],
+      "@auth/*": ["./auth/*"],
+      "@whatsapp/*": ["./whatsapp/*"],
+      "@crm/*": ["./crm/*"],
+      "@gemini/*": ["./gemini/*"],
+      "@queue/*": ["./queue/*"],
+      "@admin/*": ["./admin/*"],
+      "@common/*": ["./common/*"],
+      "@prisma/*": ["./prisma/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+}

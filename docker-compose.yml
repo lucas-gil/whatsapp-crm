@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: whatsapp-crm-postgres
+    environment:
+      POSTGRES_USER: whatsapp_user
+      POSTGRES_PASSWORD: whatsapp_password
+      POSTGRES_DB: whatsapp_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whatsapp-crm
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp-crm-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whatsapp-crm
+
+  # MinIO (opcional, para storage S3-compatível)
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: whatsapp-crm-minio
+  #   environment:
+  #     MINIO_ROOT_USER: minioadmin
+  #     MINIO_ROOT_PASSWORD: minioadmin123
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - minio_data:/minio_root
+  #   command: minio server /minio_root --console-address ":9001"
+  #   networks:
+  #     - whatsapp-crm
+
+  # Backend NestJS API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp-crm-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://whatsapp_user:whatsapp_password@postgres:5432/whatsapp_crm"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
+      PORT: 3000
+      CORS_ORIGIN: "http://localhost:3001"
+      WHATSAPP_PROVIDER: "web-qr"
+      STORAGE_PROVIDER: "local"
+      STORAGE_PATH: "./storage"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/storage:/app/storage
+      - ./backend/sessions:/app/sessions
+    networks:
+      - whatsapp-crm
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whatsapp-crm-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:3000"
+      NODE_ENV: production
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    networks:
+      - whatsapp-crm
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  # minio_data:
+  #   driver: local
+
+networks:
+  whatsapp-crm:
+    driver: bridge
