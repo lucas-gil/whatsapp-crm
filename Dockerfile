@@ -1,53 +1,44 @@
-# WhatsApp CRM - Production Ready
-# Version: 3.0.1 - Feb 02 2026 12:30 UTC
-# All-in-One: Backend + Frontend + Nginx
-# Force Build Timestamp: 1738506600
+# ============================================================
+# WHATSAPP CRM PRODUCTION
+# Built from GitHub - Self-contained
+# ============================================================
 
-FROM node:20-alpine as build_backend
+FROM node:20-alpine AS stage_build_backend_only
 RUN apk add --no-cache git
-WORKDIR /tmp
-RUN git clone https://github.com/lucas-gil/whatsapp-crm.git app && cd app/backend && npm install --legacy-peer-deps && npm run build
+WORKDIR /workspace
+RUN git clone https://github.com/lucas-gil/whatsapp-crm.git . && cd backend && npm install --legacy-peer-deps && npm run build
 
-FROM node:20-alpine as build_frontend  
+FROM node:20-alpine AS stage_build_frontend_only
 RUN apk add --no-cache git
-WORKDIR /tmp
-RUN git clone https://github.com/lucas-gil/whatsapp-crm.git app && cd app/frontend && npm install --legacy-peer-deps && npm run build
+WORKDIR /workspace
+RUN git clone https://github.com/lucas-gil/whatsapp-crm.git . && cd frontend && npm install --legacy-peer-deps && npm run build
 
-FROM node:20-alpine as production
+FROM node:20-alpine AS runtime_final
 RUN apk add --no-cache nginx supervisor curl dumb-init
-RUN mkdir -p /var/log/supervisor /app && addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
+RUN mkdir -p /var/log/supervisor /app /etc/nginx/conf.d /etc/supervisor/conf.d
+RUN addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
 
 WORKDIR /app
 
-COPY --from=build_backend /tmp/app/backend/dist ./backend/dist
-COPY --from=build_backend /tmp/app/backend/node_modules ./backend/node_modules
-COPY --from=build_backend /tmp/app/backend/package.json ./backend/
+COPY --from=stage_build_backend_only /workspace/backend/dist ./backend/dist
+COPY --from=stage_build_backend_only /workspace/backend/node_modules ./backend/node_modules
+COPY --from=stage_build_backend_only /workspace/backend/package.json ./backend/
 
-COPY --from=build_frontend /tmp/app/frontend/.next ./frontend/.next
-COPY --from=build_frontend /tmp/app/frontend/node_modules ./frontend/node_modules
-COPY --from=build_frontend /tmp/app/frontend/public ./frontend/public
-COPY --from=build_frontend /tmp/app/frontend/package.json ./frontend/
+COPY --from=stage_build_frontend_only /workspace/frontend/.next ./frontend/.next
+COPY --from=stage_build_frontend_only /workspace/frontend/node_modules ./frontend/node_modules
+COPY --from=stage_build_frontend_only /workspace/frontend/public ./frontend/public
+COPY --from=stage_build_frontend_only /workspace/frontend/package.json ./frontend/
 
-RUN mkdir -p /app/backend/storage && chown -R nodejs:nodejs /app
+RUN mkdir -p /app/backend/storage /app/backend/sessions && chown -R nodejs:nodejs /app
 
-RUN mkdir -p /etc/nginx/conf.d && echo 'upstream api{server 127.0.0.1:3000;}upstream web{server 127.0.0.1:3001;}server{listen 80;location /api/{proxy_pass http://api;}location /{proxy_pass http://web;}location /health{return 200 OK;}}' > /etc/nginx/conf.d/default.conf
+RUN printf "upstream api { server 127.0.0.1:3000; }\nupstream web { server 127.0.0.1:3001; }\nserver {\n  listen 80;\n  location /api/ { proxy_pass http://api; proxy_set_header Host \$host; }\n  location / { proxy_pass http://web; proxy_set_header Host \$host; }\n  location /health { return 200 OK; }\n}\n" > /etc/nginx/conf.d/default.conf
 
-RUN mkdir -p /etc/supervisor/conf.d && echo '[supervisord]
-nodaemon=true
-[program:backend]
-directory=/app/backend
-command=node dist/main.js
-autorestart=true
-[program:frontend]
-directory=/app/frontend
-command=npm start
-autorestart=true
-[program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
-autorestart=true' > /etc/supervisor/conf.d/supervisord.conf
+RUN printf "[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautorestart=true\nstdout_logfile=/var/log/supervisor/backend.log\nstderr_logfile=/var/log/supervisor/backend.err\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=npm start\nautorestart=true\nstdout_logfile=/var/log/supervisor/frontend.log\nstderr_logfile=/var/log/supervisor/frontend.err\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautorestart=true\nstdout_logfile=/var/log/supervisor/nginx.log\nstderr_logfile=/var/log/supervisor/nginx.err\n" > /etc/supervisor/conf.d/supervisord.conf
 
 USER nodejs
 EXPOSE 80
-HEALTHCHECK --interval=30s CMD curl http://localhost/health 2>/dev/null || exit 1
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1
+
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
