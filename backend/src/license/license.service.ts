@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateLicenseDto } from './dto/create-license.dto';
+import { CreateLicenseDto, LicenseTypeEnum } from './dto/create-license.dto';
 import { HashUtil } from '../common/utils/hash.util';
 import { Logger } from '../common/utils/logger.util';
 import { nanoid } from 'nanoid';
@@ -20,9 +20,9 @@ export class LicenseService {
 
     // Calcular data de expiração
     let expiresAt: Date | null = null;
-    if (dto.type === LicenseType.TEMPORARY_12MIN) {
+    if (dto.type === LicenseTypeEnum.TEMPORARY_12MIN) {
       expiresAt = new Date(Date.now() + 12 * 60 * 1000); // 12 minutos
-    } else if (dto.type === LicenseType.TEMPORARY_30DAYS) {
+    } else if (dto.type === LicenseTypeEnum.TEMPORARY_30DAYS) {
       expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
     }
     // ADMIN_INFINITE: expiresAt = null
@@ -32,7 +32,7 @@ export class LicenseService {
         workspaceId,
         keyHash,
         keyPreview,
-        type: dto.type,
+        type: dto.type as LicenseType,
         expiresAt,
       },
     });
