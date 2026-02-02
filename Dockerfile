@@ -36,56 +36,24 @@ COPY --from=stage_frontend /build/frontend/package.json ./frontend/package.json
 
 RUN mkdir -p /app/backend/storage /app/backend/sessions && chown -R nodejs:nodejs /app
 
-RUN rm -f /etc/nginx/conf.d/default.conf && cat > /etc/nginx/conf.d/default.conf << 'NGINX'
-upstream backend {
-  server 127.0.0.1:3000;
-}
-upstream frontend {
-  server 127.0.0.1:3001;
-}
-server {
-  listen 80;
-  client_max_body_size 100M;
-  location /health {
-    return 200 "OK";
-    add_header Content-Type text/plain;
-  }
-  location /api/ {
-    proxy_pass http://backend;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-  }
-  location / {
-    proxy_pass http://frontend;
-    proxy_set_header Host $host;
-  }
-}
-NGINX
+# Create NGINX config
+RUN mkdir -p /etc/nginx/conf.d && \
+    echo "upstream backend { server 127.0.0.1:3000; } \
+upstream frontend { server 127.0.0.1:3001; } \
+server { \
+  listen 80; \
+  client_max_body_size 100M; \
+  location /health { return 200 \"OK\"; add_header Content-Type text/plain; } \
+  location /api/ { proxy_pass http://backend; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; } \
+  location / { proxy_pass http://frontend; proxy_set_header Host \$host; } \
+}" > /etc/nginx/conf.d/default.conf
 
-RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/supervisord.conf << 'SUPER'
-[supervisord]
-nodaemon=true
-
-[program:backend]
-directory=/app/backend
-command=node dist/main.js
-autorestart=true
-stdout_logfile=/var/log/supervisor/backend.log
-stderr_logfile=/var/log/supervisor/backend.err
-
-[program:frontend]
-directory=/app/frontend
-command=npm start
-autorestart=true
-stdout_logfile=/var/log/supervisor/frontend.log
-stderr_logfile=/var/log/supervisor/frontend.err
-
-[program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
-autorestart=true
-stdout_logfile=/var/log/supervisor/nginx.log
-stderr_logfile=/var/log/supervisor/nginx.err
-SUPER
+# Create Supervisor config
+RUN mkdir -p /etc/supervisor/conf.d && \
+    echo "[supervisord] \n nodaemon=true \n \
+[program:backend] \n directory=/app/backend \n command=node dist/main.js \n autorestart=true \n \
+[program:frontend] \n directory=/app/frontend \n command=npm start \n autorestart=true \n \
+[program:nginx] \n command=/usr/sbin/nginx -g \"daemon off;\" \n autorestart=true" > /etc/supervisor/conf.d/supervisord.conf
 
 USER nodejs
 EXPOSE 80
