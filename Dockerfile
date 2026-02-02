@@ -1,6 +1,7 @@
 # WhatsApp CRM - Production Ready
-# Version: 3.0.0 - Feb 02 2026 12:00 UTC
+# Version: 3.0.1 - Feb 02 2026 12:30 UTC
 # All-in-One: Backend + Frontend + Nginx
+# Force Build Timestamp: 1738506600
 
 FROM node:20-alpine as build_backend
 RUN apk add --no-cache git

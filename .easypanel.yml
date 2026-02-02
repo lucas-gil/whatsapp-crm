@@ -1,0 +1,7 @@
+version: 1
+settings:
+  buildCache: false
+  buildContext: /
+  dockerfile: Dockerfile
+  forceBuild: true
+  noCache: true
