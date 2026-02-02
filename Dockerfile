@@ -1,5 +1,6 @@
 # ============================================
 # WhatsApp CRM - Unified Docker Build
+# Build Date: 2026-02-02T01:51:00Z
 # ============================================
 
 FROM node:20-alpine AS builder
