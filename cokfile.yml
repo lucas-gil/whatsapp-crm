@@ -1,0 +1,120 @@
+# EasyPanel / Hostinger Cokfile Configuration
+# Deploy both backend and frontend with single command
+
+version: "1.0"
+project: "whatsapp-crm"
+description: "WhatsApp CRM - NestJS Backend + Next.js Frontend"
+
+services:
+  database:
+    image: "postgres:16-alpine"
+    container_name: "whatsapp-crm-postgres"
+    environment:
+      POSTGRES_USER: "${DB_USER:-whatsapp_user}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-whatsapp_password}"
+      POSTGRES_DB: "${DB_NAME:-whatsapp_crm}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-whatsapp_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  cache:
+    image: "redis:7-alpine"
+    container_name: "whatsapp-crm-redis"
+    command: "redis-server --appendonly yes"
+    ports:
+      - "6379:6379"
+    volumes:
+      - "redis_data:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: "./backend"
+      dockerfile: "Dockerfile"
+    container_name: "whatsapp-crm-backend"
+    environment:
+      NODE_ENV: "production"
+      DATABASE_URL: "postgresql://${DB_USER:-whatsapp_user}:${DB_PASSWORD:-whatsapp_password}@database:5432/${DB_NAME:-whatsapp_crm}"
+      REDIS_URL: "redis://cache:6379"
+      JWT_SECRET: "${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}"
+      PORT: "3000"
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:3001}"
+      WHATSAPP_PROVIDER: "${WHATSAPP_PROVIDER:-web-qr}"
+      STORAGE_PROVIDER: "${STORAGE_PROVIDER:-local}"
+      STORAGE_PATH: "./storage"
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    volumes:
+      - "./backend/storage:/app/storage"
+      - "./backend/sessions:/app/sessions"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: "./frontend"
+      dockerfile: "Dockerfile"
+    container_name: "whatsapp-crm-frontend"
+    environment:
+      NEXT_PUBLIC_API_URL: "${API_URL:-http://localhost:3000}"
+      NODE_ENV: "production"
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+
+# Deploy commands
+commands:
+  build: "docker-compose -f docker-compose.yml build --no-cache"
+  up: "docker-compose -f docker-compose.yml up -d"
+  down: "docker-compose -f docker-compose.yml down"
+  restart: "docker-compose -f docker-compose.yml restart"
+  logs: "docker-compose -f docker-compose.yml logs -f"
+  ps: "docker-compose -f docker-compose.yml ps"
+  pull: "git pull origin main && docker-compose -f docker-compose.yml up -d --build"
+
+# Health checks
+healthchecks:
+  backend: "http://localhost:3000/health"
+  frontend: "http://localhost:3001"
+
+# Auto-update configuration
+autoupdate:
+  enabled: true
+  source: "github"
+  repo: "lucas-gil/whatsapp-crm"
+  branch: "main"
+  interval: "hourly"
