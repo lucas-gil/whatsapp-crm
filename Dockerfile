@@ -23,14 +23,14 @@ RUN npm install --legacy-peer-deps && npm run build
 
 # Copy to final location
 WORKDIR /
-RUN mkdir -p /app/backend /app/frontend && \
+RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/backend/dist /app/backend/ && \
     cp -r /build/backend/node_modules /app/backend/ && \
     cp /build/backend/package.json /app/backend/ && \
     cp -r /build/frontend/.next /app/frontend/ && \
     cp -r /build/frontend/node_modules /app/frontend/ && \
-    cp -r /build/frontend/public /app/frontend/ && \
     cp /build/frontend/package.json /app/frontend/ && \
+    [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
     rm -rf /build
 
 # Setup Nginx
