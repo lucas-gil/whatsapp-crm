@@ -4,7 +4,7 @@
 # ============================================================
 
 FROM node:20-alpine
-RUN apk add --no-cache git nginx supervisor curl dumb-init bash openssl
+RUN apk add --no-cache git nginx supervisor curl dumb-init bash libssl1.1
 RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
 RUN addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
 
