@@ -33,72 +33,45 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
     rm -rf /build
 
-# Setup Nginx config
-RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
-upstream api {
-  server 127.0.0.1:3000;
-}
-
-upstream web {
-  server 127.0.0.1:3001;
-}
-
-server {
-  listen 80;
-  server_name _;
-
-  location /api/ {
-    proxy_pass http://api;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  }
-
-  location / {
-    proxy_pass http://web;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  }
-
-  location /health {
-    access_log off;
-    return 200 "OK";
-    add_header Content-Type text/plain;
-  }
-}
-EOF
+# Setup Nginx config - using shell script to avoid heredoc parsing issues
+RUN /bin/bash -c 'echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.conf && \
+echo "upstream web { server 127.0.0.1:3001; }" >> /etc/nginx/conf.d/default.conf && \
+echo "server {" >> /etc/nginx/conf.d/default.conf && \
+echo "  listen 80;" >> /etc/nginx/conf.d/default.conf && \
+echo "  server_name _;" >> /etc/nginx/conf.d/default.conf && \
+echo "  location /api/ { proxy_pass http://api; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }" >> /etc/nginx/conf.d/default.conf && \
+echo "  location / { proxy_pass http://web; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }" >> /etc/nginx/conf.d/default.conf && \
+echo "  location /health { access_log off; return 200 \"OK\"; add_header Content-Type text/plain; }" >> /etc/nginx/conf.d/default.conf && \
+echo "}" >> /etc/nginx/conf.d/default.conf'
 
 # Setup Supervisor config
-RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
-[supervisord]
-nodaemon=true
-logfile=/var/log/supervisor/supervisord.log
-
-[program:backend]
-directory=/app/backend
-command=node dist/main.js
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/supervisor/backend.log
-stdout_logfile=/var/log/supervisor/backend.log
-
-[program:frontend]
-directory=/app/frontend
-command=/bin/bash -c "exec node_modules/.bin/next start -p 3001"
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/supervisor/frontend.log
-stdout_logfile=/var/log/supervisor/frontend.log
-
-[program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/supervisor/nginx.log
-stdout_logfile=/var/log/supervisor/nginx.log
-priority=999
-EOF
+RUN /bin/bash -c 'echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
+echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "[program:backend]" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "directory=/app/backend" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "command=node dist/main.js" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/backend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/var/log/supervisor/backend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "[program:frontend]" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "directory=/app/frontend" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "command=/bin/bash -c \"exec node_modules/.bin/next start -p 3001\"" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/frontend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/var/log/supervisor/frontend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "[program:nginx]" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "command=/usr/sbin/nginx -g \"daemon off;\"" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/nginx.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/var/log/supervisor/nginx.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 
 # Setup permissions - but keep root for nginx and supervisor
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
