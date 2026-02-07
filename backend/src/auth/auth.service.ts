@@ -51,7 +51,7 @@ export class AuthService {
     });
 
     this.logger.info(`📊 Chaves encontradas no workspace: ${licenseKeys.length}`);
-    licenseKeys.forEach((key, idx) => {
+    licenseKeys.forEach((key: any, idx: number) => {
       this.logger.info(`  [${idx + 1}] ${key.keyPreview} (tipo: ${key.type}, revogada: ${!!key.revokedAt})`);
     });
 

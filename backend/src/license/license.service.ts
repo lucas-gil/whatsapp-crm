@@ -4,7 +4,6 @@ import { CreateLicenseDto, LicenseTypeEnum } from './dto/create-license.dto';
 import { HashUtil } from '../common/utils/hash.util';
 import { Logger } from '../common/utils/logger.util';
 import { nanoid } from 'nanoid';
-import { LicenseType } from '@prisma/client';
 
 @Injectable()
 export class LicenseService {
