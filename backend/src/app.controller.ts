@@ -34,3 +34,4 @@ export class AppController {
   resetAdminKeySimple() {
     return this.appService.resetAdminKeySimple();
   }
+}
