@@ -23,6 +23,7 @@
     "migration:run": "typeorm migration:run",
     "db:migrate": "prisma migrate dev",
     "db:seed": "ts-node prisma/seed.ts",
+    "db:reset-admin": "ts-node reset-admin-key.ts",
     "db:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "health": "curl http://localhost:3000/health"

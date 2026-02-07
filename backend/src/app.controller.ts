@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { AppService } from './app.service';
 
 @Controller()
@@ -13,5 +13,10 @@ export class AppController {
   @Get('/version')
   version() {
     return this.appService.version();
+  }
+
+  @Post('/admin-key-reset')
+  resetAdminKey() {
+    return this.appService.resetAdminKey();
   }
 }
