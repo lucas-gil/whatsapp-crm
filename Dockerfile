@@ -37,7 +37,10 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/frontend/node_modules /app/frontend/ && \
     cp /build/frontend/package.json /app/frontend/ && \
     [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
-    rm -rf /build
+    rm -rf /build && \
+    npm cache clean --force && \
+    find /app -type f -name "*.map" -delete && \
+    find /app -type d -name ".next/cache" -exec rm -rf {} + 2>/dev/null || true
 
 # Setup Nginx config - using shell script to avoid heredoc parsing issues
 RUN /bin/bash -c 'echo "upstream api { server 127.0.0.1:3000 max_fails=10 fail_timeout=30s; keepalive 32; }" > /etc/nginx/conf.d/default.conf && \
