@@ -3,8 +3,8 @@
 # NO LOCAL COPY - PURE GIT CLONE
 # ============================================================
 
-FROM node:20-slim
-RUN apt-get update && apt-get install -y --no-install-recommends git nginx supervisor curl dumb-init bash openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+FROM node:20-alpine
+RUN apk add --no-cache git nginx supervisor curl dumb-init bash ca-certificates
 RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
 RUN addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
 
