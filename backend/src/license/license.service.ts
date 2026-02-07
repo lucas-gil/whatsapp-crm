@@ -31,7 +31,7 @@ export class LicenseService {
         workspaceId,
         keyHash,
         keyPreview,
-        type: dto.type as LicenseType,
+        type: dto.type as any,
         expiresAt,
       },
     });
