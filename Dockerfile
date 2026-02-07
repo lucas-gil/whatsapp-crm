@@ -98,20 +98,17 @@ echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 
 # Create startup script that runs seed and then supervisor
-RUN /bin/bash -c 'cat > /app/startup.sh << '"'"'EOF'"'"'
+RUN cat > /app/startup.sh << 'SCRIPT_END'
 #!/bin/bash
-set -e
-
 echo "🌱 Executando seed do banco de dados..."
 cd /app/backend
 export NODE_PATH=/app/backend/node_modules
 npx ts-node prisma/seed.ts 2>&1 || echo "⚠️ Seed falhou ou já foi executado"
-
 echo "✅ Iniciando supervisor..."
 cd /app
 exec supervisord -c /etc/supervisor/conf.d/supervisord.conf
-EOF
-chmod +x /app/startup.sh'
+SCRIPT_END
+RUN chmod +x /app/startup.sh
 
 WORKDIR /app
 # Don't switch to nodejs user - supervisor needs to run as root to manage nginx
