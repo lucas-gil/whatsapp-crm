@@ -3,6 +3,9 @@
 # NO LOCAL COPY - PURE GIT CLONE
 # ============================================================
 
+ARG BUILD_DATE=unknown
+ARG GIT_COMMIT=unknown
+
 FROM node:20
 RUN apt-get update && apt-get install -y --no-install-recommends git nginx supervisor curl dumb-init bash && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
@@ -10,7 +13,8 @@ RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /usr/sbin/nologin no
 
 WORKDIR /build
 
-# Clone repository
+# Force fresh git clone by using build args (cache invalidation)
+RUN echo "Building at ${BUILD_DATE} from commit ${GIT_COMMIT}"
 RUN git clone https://github.com/lucas-gil/whatsapp-crm.git . 
 
 # Build backend
