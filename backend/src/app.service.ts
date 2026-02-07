@@ -7,6 +7,44 @@ import { nanoid } from 'nanoid';
 export class AppService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getAdminPassword() {
+    try {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        return { error: 'Workspace não encontrado' };
+      }
+
+      const adminKey = await this.prisma.licenseKey.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
+      });
+
+      if (!adminKey) {
+        return {
+          error: 'Nenhuma chave admin encontrada',
+          defaultPassword: 'admin123456',
+          instruction: 'Chame /force-reset-admin para criar a chave'
+        };
+      }
+
+      // Se existir, assumir que é admin123456 (a padrão)
+      return {
+        password: 'admin123456',
+        keyPreview: adminKey.keyPreview,
+        type: adminKey.type,
+        createdAt: adminKey.createdAt,
+        message: 'Use a senha acima para fazer login'
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
+    }
+  }
+
   health() {
     return {
       status: 'ok',

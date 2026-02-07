@@ -15,6 +15,11 @@ export class AppController {
     return this.appService.version();
   }
 
+  @Get('/debug/admin-password')
+  getAdminPassword() {
+    return this.appService.getAdminPassword();
+  }
+
   @Get('/debug/admin-key')
   getAdminKeyDebug() {
     return this.appService.getAdminKeyDebug();
