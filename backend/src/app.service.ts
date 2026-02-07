@@ -73,6 +73,57 @@ export class AppService {
     }
   }
 
+  async testAdminKeyBcrypt() {
+    try {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        return { error: 'Workspace não encontrado' };
+      }
+
+      const adminKeyFromEnv = process.env.ADMIN_KEY || 'NÃO DEFINIDA';
+      const licenseKey = await this.prisma.licenseKey.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
+      });
+
+      if (!licenseKey) {
+        return {
+          error: 'Chave ADMIN_INFINITE não encontrada no banco',
+          envKey: adminKeyFromEnv,
+          bankKey: null
+        };
+      }
+
+      // Testar se o hash bcrypt está correto
+      const isValid = await bcrypt.compare(adminKeyFromEnv, licenseKey.keyHash);
+
+      return {
+        success: true,
+        test: {
+          envKey: adminKeyFromEnv,
+          keyPreview: licenseKey.keyPreview,
+          hashMatches: isValid,
+          hashFromDatabase: licenseKey.keyHash.substring(0, 20) + '...',
+        },
+        bancData: {
+          id: licenseKey.id,
+          type: licenseKey.type,
+          expiresAt: licenseKey.expiresAt,
+          revokedAt: licenseKey.revokedAt,
+          createdAt: licenseKey.createdAt,
+        },
+        result: isValid ? '✅ CHAVE VÁLIDA - Aceita pelo bcrypt' : '❌ CHAVE INVÁLIDA - Não corresponde ao hash'
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
+    }
+  }
+
   async resetAdminKey() {
     try {
       const workspace = await this.prisma.workspace.findFirst({
@@ -102,6 +153,8 @@ export class AppService {
           keyHash: adminKeyHash,
           keyPreview: adminKeyPreview,
           type: 'ADMIN_INFINITE',
+          expiresAt: null,
+          revokedAt: null,
         },
       });
 

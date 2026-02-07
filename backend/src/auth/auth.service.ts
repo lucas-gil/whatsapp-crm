@@ -22,6 +22,8 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    this.logger.log(`🔑 Tentativa de login com chave: ${dto.key.substring(0, 8)}...`);
+    
     if (!dto.key) {
       throw new BadRequestException('Chave de acesso obrigatória');
     }
@@ -34,8 +36,11 @@ export class AuthService {
     });
 
     if (!workspace) {
+      this.logger.error('Workspace não encontrado');
       throw new NotFoundException('Workspace não encontrado');
     }
+
+    this.logger.log(`✅ Workspace encontrado: ${workspace.slug} (${workspace.id})`);
 
     // Buscar todas as chaves ativas dessa workspace (não revogadas, não expiradas)
     const licenseKeys = await this.prisma.licenseKey.findMany({
@@ -45,14 +50,22 @@ export class AuthService {
       },
     });
 
+    this.logger.log(`📊 Chaves encontradas no workspace: ${licenseKeys.length}`);
+    licenseKeys.forEach((key, idx) => {
+      this.logger.log(`  [${idx + 1}] ${key.keyPreview} (tipo: ${key.type}, revogada: ${!!key.revokedAt})`);
+    });
+
     if (licenseKeys.length === 0) {
+      this.logger.error('Nenhuma chave válida encontrada');
       throw new UnauthorizedException('Nenhuma chave válida encontrada');
     }
 
     // Verificar qual chave corresponde
     let validKey: any = null;
     for (const keyRecord of licenseKeys) {
+      this.logger.log(`🔍 Comparando com ${keyRecord.keyPreview}...`);
       const isMatch = await HashUtil.compare(dto.key, keyRecord.keyHash);
+      this.logger.log(`  → Resultado: ${isMatch ? '✅ MATCH' : '❌ SEM MATCH'}`);
       if (isMatch) {
         validKey = keyRecord;
         break;
@@ -60,13 +73,20 @@ export class AuthService {
     }
 
     if (!validKey) {
+      this.logger.error('❌ Chave inválida - nenhuma correspondência encontrada');
       throw new UnauthorizedException('Chave inválida');
     }
 
+    this.logger.log(`✅ Chave válida encontrada: ${validKey.keyPreview}`);
+
     // Verificar expiração
     if (validKey.expiresAt && new Date() > validKey.expiresAt) {
+      this.logger.error(`❌ Chave expirada em: ${validKey.expiresAt}`);
       throw new UnauthorizedException('Chave expirada');
     }
+
+    this.logger.log(`✅ Chave não expirada`);
+
 
     // Determinar se é admin
     const isAdmin = validKey.type === 'ADMIN_INFINITE';
