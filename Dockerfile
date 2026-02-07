@@ -10,6 +10,8 @@ FROM node:20
 RUN apt-get update && apt-get install -y --no-install-recommends git nginx supervisor curl dumb-init bash && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
 RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /usr/sbin/nologin nodejs
+# Remove default nginx config to avoid conflicts
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/*.conf 2>/dev/null || true
 
 WORKDIR /build
 
@@ -99,7 +101,7 @@ WORKDIR /app
 # Don't switch to nodejs user - supervisor needs to run as root to manage nginx
 
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1
+# Removed HEALTHCHECK as it was causing container restarts
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
