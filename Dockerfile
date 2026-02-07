@@ -6,7 +6,7 @@
 FROM node:20
 RUN apt-get update && apt-get install -y --no-install-recommends git nginx supervisor curl dumb-init bash && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
-RUN addgroup -g 1001 nodejs && adduser -S -u 1001 nodejs
+RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /usr/sbin/nologin nodejs
 
 WORKDIR /build
 
