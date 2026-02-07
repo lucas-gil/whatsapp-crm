@@ -13,7 +13,7 @@ export default function DashboardPage() {
       try {
         const token = localStorage.getItem('token');
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/admin/stats`,
+          `/api/admin/stats`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -25,7 +25,7 @@ export default function DashboardPage() {
 
         // Verificar conexão WhatsApp
         const waResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/whatsapp/status`,
+          `/api/whatsapp/status`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
