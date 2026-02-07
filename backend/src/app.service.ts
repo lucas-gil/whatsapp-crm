@@ -212,4 +212,68 @@ export class AppService {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }
+
+  async forceResetAdmin() {
+    try {
+      console.log('🔴 FORCE RESET - Deletando e recriando chave admin...');
+      
+      let workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        console.log('Criando workspace...');
+        workspace = await this.prisma.workspace.create({
+          data: { name: 'Default Workspace', slug: 'default' },
+        });
+      }
+
+      // Deletar TODAS as chaves
+      const deletedCount = await this.prisma.licenseKey.deleteMany({
+        where: { workspaceId: workspace.id },
+      });
+
+      console.log(`Deletadas ${deletedCount.count} chaves antigas`);
+
+      // Criar nova chave com hash manualmente testado
+      const plainKey = 'admin123456';
+      console.log(`Gerando hash para: ${plainKey}`);
+      
+      const hash = await bcrypt.hash(plainKey, 12);
+      console.log(`Hash gerado: ${hash}`);
+
+      // Testar o hash ANTES de salvar
+      const testMatch = await bcrypt.compare(plainKey, hash);
+      console.log(`🧪 Teste bcrypt: ${testMatch ? '✅ PASSOU' : '❌ FALHOU'}`);
+
+      if (!testMatch) {
+        return { error: 'Falha no teste bcrypt - hash não corresponde' };
+      }
+
+      // Salvar no banco
+      const newKey = await this.prisma.licenseKey.create({
+        data: {
+          workspaceId: workspace.id,
+          keyHash: hash,
+          keyPreview: 'admin1234****',
+          type: 'ADMIN_INFINITE',
+          expiresAt: null,
+          revokedAt: null,
+        },
+      });
+
+      console.log(`✅ Chave criada: ${newKey.id}`);
+
+      return {
+        success: true,
+        password: plainKey,
+        keyId: newKey.id,
+        testResult: testMatch,
+        message: `✅ CHAVE ADMIN RESETADA! Senha: ${plainKey}`,
+      };
+    } catch (error) {
+      console.error('❌ Erro ao fazer force reset:', error);
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
+    }
+  }
 }
