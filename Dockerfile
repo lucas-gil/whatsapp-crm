@@ -47,6 +47,7 @@ echo "}" >> /etc/nginx/conf.d/default.conf'
 # Setup Supervisor config
 RUN /bin/bash -c 'echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
 echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "user=root" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:backend]" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -54,7 +55,8 @@ echo "directory=/app/backend" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=node dist/main.js" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/backend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/backend.err" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/var/log/supervisor/backend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:frontend]" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -62,14 +64,15 @@ echo "directory=/app/frontend" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=/bin/bash -c \"exec node_modules/.bin/next start -p 3001\"" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/frontend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/frontend.err" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/var/log/supervisor/frontend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:nginx]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=/usr/sbin/nginx -g \"daemon off;\"" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/nginx.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/var/log/supervisor/nginx.err" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/var/log/supervisor/nginx.log" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 
