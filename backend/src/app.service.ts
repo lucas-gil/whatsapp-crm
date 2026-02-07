@@ -36,17 +36,37 @@ export class AppService {
           workspaceId: workspace.id,
           type: 'ADMIN_INFINITE',
         },
-        select: {
-          id: true,
-          keyPreview: true,
-          type: true,
-          createdAt: true,
-        },
       });
+
+      if (!adminKey) {
+        return {
+          workspace: { id: workspace.id, slug: workspace.slug },
+          adminKey: null,
+          error: 'Chave ADMIN_INFINITE não encontrada no banco'
+        };
+      }
+
+      // Verificar expiração
+      const now = new Date();
+      const isExpired = adminKey.expiresAt && now > adminKey.expiresAt;
 
       return {
         workspace: { id: workspace.id, slug: workspace.slug },
-        adminKey: adminKey || { status: 'Não encontrado' },
+        adminKey: {
+          id: adminKey.id,
+          keyPreview: adminKey.keyPreview,
+          type: adminKey.type,
+          createdAt: adminKey.createdAt,
+          expiresAt: adminKey.expiresAt,
+          isExpired: isExpired,
+          revokedAt: adminKey.revokedAt,
+          isRevoked: !!adminKey.revokedAt,
+          activatedAt: adminKey.activatedAt,
+        },
+        testInfo: {
+          envADMIN_KEY: process.env.ADMIN_KEY || 'NÃO DEFINIDA',
+          message: 'Use a chave acima para fazer login'
+        }
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };

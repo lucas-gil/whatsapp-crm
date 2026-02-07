@@ -25,11 +25,11 @@ async function bootstrap() {
     // Executar seed se necessário
     try {
       console.log('🌱 Verificando/criando chave admin...');
-      const workspace = await prisma.workspace.findFirst({ where: { slug: 'default' } });
+      let workspace = await prisma.workspace.findFirst({ where: { slug: 'default' } });
       
       if (!workspace) {
         console.log('📦 Criando workspace padrão...');
-        await prisma.workspace.create({
+        workspace = await prisma.workspace.create({
           data: { name: 'Default Workspace', slug: 'default' },
         });
       }
@@ -38,25 +38,32 @@ async function bootstrap() {
       const adminKeyHash = await bcrypt.hash(adminKey, 12);
       const adminKeyPreview = `${adminKey.slice(0, 8)}****${adminKey.slice(-4)}`;
       
-      // Deletar e recriar chave admin
-      await prisma.licenseKey.deleteMany({
-        where: { workspaceId: workspace?.id || (await prisma.workspace.findFirst({ where: { slug: 'default' } }))?.id },
-      });
+      console.log(`📝 Admin key preview: ${adminKeyPreview}`);
+      console.log(`🔐 Hash bcrypt gerado: ${adminKeyHash.substring(0, 20)}...`);
       
-      const wsId = workspace?.id || (await prisma.workspace.findFirst({ where: { slug: 'default' } }))?.id;
-      if (wsId) {
-        await prisma.licenseKey.create({
-          data: {
-            workspaceId: wsId,
-            keyHash: adminKeyHash,
-            keyPreview: adminKeyPreview,
-            type: 'ADMIN_INFINITE',
-          },
-        });
-        console.log(`✅ Chave admin criada: ${adminKeyPreview}`);
-      }
+      // Deletar e recriar chave admin
+      const deletedCount = await prisma.licenseKey.deleteMany({
+        where: { workspaceId: workspace.id },
+      });
+      console.log(`🗑️  Chaves antigas deletadas: ${deletedCount.count}`);
+      
+      const createdKey = await prisma.licenseKey.create({
+        data: {
+          workspaceId: workspace.id,
+          keyHash: adminKeyHash,
+          keyPreview: adminKeyPreview,
+          type: 'ADMIN_INFINITE',
+          expiresAt: null, // Garante que NÃO vai expirar
+          revokedAt: null,
+        },
+      });
+      console.log(`✅ Chave admin criada com sucesso (ID: ${createdKey.id})`);
+      console.log(`📌 Tipo: ${createdKey.type}, Expiração: ${createdKey.expiresAt || 'Nunca'}`);
     } catch (seedErr) {
-      console.warn('⚠️ Erro ao executar seed (pode já existir):', seedErr instanceof Error ? seedErr.message : 'Desconhecido');
+      console.error('❌ Erro ao executar seed:', seedErr instanceof Error ? seedErr.message : 'Desconhecido');
+      if (seedErr instanceof Error) {
+        console.error('Stack:', seedErr.stack);
+      }
     }
 
     // CORS
