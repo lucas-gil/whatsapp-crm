@@ -30,16 +30,21 @@ async function main() {
   console.log(`✅ Workspace criado: ${workspace.id}`);
 
   // 2. Criar chave ADMIN
-  const adminKey = nanoid(32);
+  // Usar chave do env se definida, senão gerar aleatória
+  const adminKey = process.env.ADMIN_KEY || nanoid(32);
   const adminKeyHash = await HashUtil.hash(adminKey);
   const adminKeyPreview = HashUtil.generateKeyPreview(adminKey);
 
-  const adminLicense = await prisma.licenseKey.upsert({
+  // Deletar chave admin anterior se existir
+  await prisma.licenseKey.deleteMany({
     where: {
-      keyHash: adminKeyHash,
+      workspaceId: workspace.id,
+      type: 'ADMIN_INFINITE',
     },
-    update: {},
-    create: {
+  });
+
+  const adminLicense = await prisma.licenseKey.create({
+    data: {
       workspaceId: workspace.id,
       keyHash: adminKeyHash,
       keyPreview: adminKeyPreview,
@@ -49,6 +54,12 @@ async function main() {
 
   console.log(`✅ Chave ADMIN criada: ${adminKeyPreview}`);
   console.log(`🔑 CHAVE COMPLETA (salve em local seguro): ${adminKey}`);
+  
+  if (process.env.ADMIN_KEY) {
+    console.log('⚠️  USANDO CHAVE DO ARQUIVO .env - Não é aleatória!');
+  } else {
+    console.log('ℹ️  Chave gerada aleatoriamente - defina ADMIN_KEY no .env para usar uma chave customizada');
+  }
 
   // 3. Criar algumas tags padrão
   const tags = ['Novo', 'Qualificado', 'Proposta', 'Cliente', 'Perdido'];

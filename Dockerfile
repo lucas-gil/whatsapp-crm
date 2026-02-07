@@ -65,7 +65,7 @@ echo "[program:backend]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "directory=/app/backend" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=node dist/main.js" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=false" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "startsecs=15" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -76,7 +76,7 @@ echo "[program:frontend]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "directory=/app/frontend" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=/bin/bash -c \"exec node_modules/.bin/next start -p 3001\"" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=false" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "startsecs=15" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -86,7 +86,7 @@ echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:nginx]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=/usr/sbin/nginx -g \"daemon off;\"" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "autorestart=false" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "startsecs=5" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
