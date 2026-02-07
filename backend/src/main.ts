@@ -35,7 +35,8 @@ async function bootstrap() {
       }),
     );
 
-    const port = configService.get<number>('PORT', 3000);
+    // Backend SEMPRE usa porta 3000 (Nginx faz proxy na 80)
+    const port = 3000;
     const env = configService.get('NODE_ENV', 'development');
     const dbUrl = configService.get('DATABASE_URL', 'não configurada');
 
