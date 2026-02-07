@@ -97,19 +97,6 @@ echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 # Setup permissions - but keep root for nginx and supervisor
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 
-# Create startup script that runs seed and then supervisor
-RUN cat > /app/startup.sh << 'SCRIPT_END'
-#!/bin/bash
-echo "🌱 Executando seed do banco de dados..."
-cd /app/backend
-export NODE_PATH=/app/backend/node_modules
-npx ts-node prisma/seed.ts 2>&1 || echo "⚠️ Seed falhou ou já foi executado"
-echo "✅ Iniciando supervisor..."
-cd /app
-exec supervisord -c /etc/supervisor/conf.d/supervisord.conf
-SCRIPT_END
-RUN chmod +x /app/startup.sh
-
 WORKDIR /app
 # Don't switch to nodejs user - supervisor needs to run as root to manage nginx
 
@@ -120,4 +107,4 @@ EXPOSE 80
 # Removed HEALTHCHECK as it was causing container restarts
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["/app/startup.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
