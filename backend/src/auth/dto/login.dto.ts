@@ -1,8 +1,8 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 
 export class LoginDto {
   @IsString()
-  @MinLength(1)
+  @IsNotEmpty()
   key!: string; // a chave de licença
 
   workspaceSlug?: string; // opcional, se multi-workspace
