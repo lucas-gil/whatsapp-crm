@@ -44,11 +44,12 @@ echo "  location / { proxy_pass http://web; proxy_set_header Host \$host; proxy_
 echo "  location /health { access_log off; return 200 \"OK\"; add_header Content-Type text/plain; }" >> /etc/nginx/conf.d/default.conf && \
 echo "}" >> /etc/nginx/conf.d/default.conf'
 
-# Setup Supervisor config
+# Setup Supervisor config - com logs direto para stdout/stderr
 RUN /bin/bash -c 'echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf && \
 echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "user=root" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "logfile=/var/log/supervisor/supervisord.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:backend]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "directory=/app/backend" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -56,8 +57,10 @@ echo "command=node dist/main.js" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/backend.err" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stdout_logfile=/var/log/supervisor/backend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:frontend]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "directory=/app/frontend" >> /etc/supervisor/conf.d/supervisord.conf && \
@@ -65,15 +68,19 @@ echo "command=/bin/bash -c \"exec node_modules/.bin/next start -p 3001\"" >> /et
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/frontend.err" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stdout_logfile=/var/log/supervisor/frontend.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:nginx]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "command=/usr/sbin/nginx -g \"daemon off;\"" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stderr_logfile=/var/log/supervisor/nginx.err" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "stdout_logfile=/var/log/supervisor/nginx.log" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 
 # Setup permissions - but keep root for nginx and supervisor
