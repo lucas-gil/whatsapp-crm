@@ -21,6 +21,38 @@ export class AppService {
     };
   }
 
+  async getAdminKeyDebug() {
+    try {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        return { error: 'Workspace não encontrado' };
+      }
+
+      const adminKey = await this.prisma.licenseKey.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
+        select: {
+          id: true,
+          keyPreview: true,
+          type: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        workspace: { id: workspace.id, slug: workspace.slug },
+        adminKey: adminKey || { status: 'Não encontrado' },
+      };
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+
   async resetAdminKey() {
     try {
       const workspace = await this.prisma.workspace.findFirst({
