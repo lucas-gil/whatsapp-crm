@@ -33,17 +33,78 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
     rm -rf /build
 
-# Setup Nginx
-RUN printf "upstream api { server 127.0.0.1:3000; }\nupstream web { server 127.0.0.1:3001; }\nserver {\n  listen 80;\n  location /api/ { proxy_pass http://api; proxy_set_header Host \$host; }\n  location / { proxy_pass http://web; proxy_set_header Host \$host; }\n  location /health { return 200 OK; }\n}\n" > /etc/nginx/conf.d/default.conf
+# Setup Nginx config
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+upstream api {
+  server 127.0.0.1:3000;
+}
 
-# Setup Supervisor
-RUN printf "[supervisord]\nnodaemon=true\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautorestart=true\n[program:frontend]\ndirectory=/app/frontend\ncommand=npm start\nautorestart=true\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautorestart=true\n" > /etc/supervisor/conf.d/supervisord.conf
+upstream web {
+  server 127.0.0.1:3001;
+}
 
-# Setup permissions
-RUN mkdir -p /app/backend/storage && chown -R nodejs:nodejs /app
+server {
+  listen 80;
+  server_name _;
+
+  location /api/ {
+    proxy_pass http://api;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location / {
+    proxy_pass http://web;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+
+  location /health {
+    access_log off;
+    return 200 "OK";
+    add_header Content-Type text/plain;
+  }
+}
+EOF
+
+# Setup Supervisor config
+RUN cat > /etc/supervisor/conf.d/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+logfile=/var/log/supervisor/supervisord.log
+
+[program:backend]
+directory=/app/backend
+command=node dist/main.js
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/backend.log
+stdout_logfile=/var/log/supervisor/backend.log
+
+[program:frontend]
+directory=/app/frontend
+command=/bin/bash -c "exec node_modules/.bin/next start -p 3001"
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/frontend.log
+stdout_logfile=/var/log/supervisor/frontend.log
+
+[program:nginx]
+command=/usr/sbin/nginx -g "daemon off;"
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/supervisor/nginx.log
+stdout_logfile=/var/log/supervisor/nginx.log
+priority=999
+EOF
+
+# Setup permissions - but keep root for nginx and supervisor
+RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 
 WORKDIR /app
-USER nodejs
+# Don't switch to nodejs user - supervisor needs to run as root to manage nginx
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost/health || exit 1
