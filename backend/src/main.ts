@@ -25,7 +25,6 @@ async function bootstrap() {
     // Executar seed se necessário
     try {
       console.log('🌱 Verificando/criando chave admin...');
-      console.log(`📌 ADMIN_KEY from ENV: ${process.env.ADMIN_KEY ? '✅ DEFINIDA' : '❌ NÃO DEFINIDA'}`);
       
       let workspace = await prisma.workspace.findFirst({ where: { slug: 'default' } });
       
@@ -34,9 +33,6 @@ async function bootstrap() {
         workspace = await prisma.workspace.create({
           data: { name: 'Default Workspace', slug: 'default' },
         });
-        console.log(`✅ Workspace criado: ${workspace.id}`);
-      } else {
-        console.log(`✅ Workspace encontrado: ${workspace.id}`);
       }
       
       // Verificar se já existe chave ADMIN_INFINITE
@@ -47,26 +43,15 @@ async function bootstrap() {
         },
       });
       
-      if (existingAdminKey) {
-        console.log(`✅ Chave ADMIN_INFINITE já existe: ${existingAdminKey.keyPreview}`);
-        console.log(`📌 Expiração: ${existingAdminKey.expiresAt || 'Nunca (infinita)'}`);
-        console.log(`📌 Revogada: ${existingAdminKey.revokedAt ? 'SIM ❌' : 'NÃO ✅'}`);
-      } else {
-        console.log('⚠️ Nenhuma chave ADMIN_INFINITE encontrada. Criando nova...');
-        
-        // SÓ usar ADMIN_KEY se estiver definida
-        const adminKeyValue = process.env.ADMIN_KEY;
-        if (!adminKeyValue) {
-          throw new Error('❌ ENV ADMIN_KEY não está definida no container!');
-        }
-        
+      if (!existingAdminKey) {
+        // SEMPRE usar SENHA PADRÃO conhecida
+        const adminKeyValue = 'admin123456';
         const adminKeyHash = await bcrypt.hash(adminKeyValue, 12);
-        const adminKeyPreview = `${adminKeyValue.slice(0, 8)}****${adminKeyValue.slice(-4)}`;
+        const adminKeyPreview = 'admin1234****';
         
-        console.log(`📝 Criando chave com preview: ${adminKeyPreview}`);
-        console.log(`🔐 Hash bcrypt (primeiros 30 chars): ${adminKeyHash.substring(0, 30)}...`);
+        console.log(`✅ Criando chave admin com senha: admin123456`);
         
-        const createdKey = await prisma.licenseKey.create({
+        await prisma.licenseKey.create({
           data: {
             workspaceId: workspace.id,
             keyHash: adminKeyHash,
@@ -77,18 +62,12 @@ async function bootstrap() {
           },
         });
         
-        console.log(`✅ Chave criada com sucesso!`);
-        console.log(`   ID: ${createdKey.id}`);
-        console.log(`   Preview: ${createdKey.keyPreview}`);
-        console.log(`   Tipo: ${createdKey.type}`);
-        console.log(`   Expiração: ${createdKey.expiresAt || 'Nunca (infinita)'}`);
+        console.log(`✅ Chave admin criada com sucesso! Senha: admin123456`);
+      } else {
+        console.log(`✅ Chave admin já existe: ${existingAdminKey.keyPreview}`);
       }
     } catch (seedErr) {
-      console.error('❌❌❌ ERRO AO EXECUTAR SEED:');
-      console.error(seedErr instanceof Error ? seedErr.message : String(seedErr));
-      if (seedErr instanceof Error) {
-        console.error('Stack trace:', seedErr.stack);
-      }
+      console.error('❌ Erro ao executar seed:', seedErr instanceof Error ? seedErr.message : String(seedErr));
     }
 
     // CORS

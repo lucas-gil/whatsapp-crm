@@ -168,4 +168,48 @@ export class AppService {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }
+
+  async resetAdminKeySimple() {
+    try {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        return { error: 'Workspace não encontrado' };
+      }
+
+      // Deletar chaves admin anteriores
+      await this.prisma.licenseKey.deleteMany({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
+      });
+
+      // Criar com senha SIMPLES e CONHECIDA
+      const simpleKey = 'admin123456';
+      const keyHash = await bcrypt.hash(simpleKey, 12);
+
+      const newKey = await this.prisma.licenseKey.create({
+        data: {
+          workspaceId: workspace.id,
+          keyHash: keyHash,
+          keyPreview: 'admin1234****',
+          type: 'ADMIN_INFINITE',
+          expiresAt: null,
+          revokedAt: null,
+        },
+      });
+
+      return {
+        success: true,
+        adminKey: simpleKey,
+        message: `✅ Chave ADMIN resetada com sucesso! Use a senha: ${simpleKey}`,
+        instructions: 'Faça login com a senha acima. Depois você pode mudar para uma senha mais forte.',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
+    }
+  }
 }

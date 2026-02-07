@@ -29,4 +29,8 @@ export class AppController {
   resetAdminKey() {
     return this.appService.resetAdminKey();
   }
-}
+
+  @Post('/admin-key-reset-simple')
+  resetAdminKeySimple() {
+    return this.appService.resetAdminKeySimple();
+  }
