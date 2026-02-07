@@ -49,7 +49,7 @@ export class AppService {
         adminKey: adminKey || { status: 'Não encontrado' },
       };
     } catch (error) {
-      return { error: error.message };
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }
 
@@ -92,7 +92,7 @@ export class AppService {
         message: '✅ Nova chave ADMIN gerada com sucesso! Salve em local seguro.',
       };
     } catch (error) {
-      return { error: error.message };
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }
 }
