@@ -15,7 +15,12 @@ export class AppController {
     return this.appService.version();
   }
 
-  @Get('/debug/admin-password')
+  @Post('/api/force-reset-admin')
+  forceResetAdmin() {
+    return this.appService.forceResetAdmin();
+  }
+
+  @Get('/api/debug/admin-password')
   getAdminPassword() {
     return this.appService.getAdminPassword();
   }
