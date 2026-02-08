@@ -44,9 +44,4 @@ export class AppController {
   resetAdminKeySimple() {
     return this.appService.resetAdminKeySimple();
   }
-
-  @Post('/force-reset-admin')
-  forceResetAdmin() {
-    return this.appService.forceResetAdmin();
-  }
 }
