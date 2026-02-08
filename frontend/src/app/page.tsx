@@ -19,7 +19,7 @@ export default function HomePage() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licenseKey }),
+        body: JSON.stringify({ key: licenseKey }),
       });
 
       if (!response.ok) {

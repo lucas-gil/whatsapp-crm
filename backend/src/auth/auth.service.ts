@@ -50,8 +50,9 @@ export class AuthService {
       throw new UnauthorizedException('Nenhuma chave admin encontrada');
     }
 
-    // VALIDAÇÃO SIMPLES: comparar texto puro
-    if (dto.key !== licenseKey.keyHash) {
+    // Comparar a chave com o hash usando bcrypt
+    const isKeyValid = await HashUtil.compare(dto.key, licenseKey.keyHash);
+    if (!isKeyValid) {
       this.logger.error('❌ Chave inválida');
       throw new UnauthorizedException('Chave inválida');
     }
