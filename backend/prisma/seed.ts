@@ -30,8 +30,8 @@ async function main() {
   console.log(`✅ Workspace criado: ${workspace.id}`);
 
   // 2. Criar chave ADMIN
-  // Usar chave do env se definida, senão gerar aleatória
-  const adminKey = process.env.ADMIN_KEY || nanoid(32);
+  // Usar chave padrão para seed inicial
+  const adminKey = 'admin123456789admin123456789admin1';
   const adminKeyHash = await HashUtil.hash(adminKey);
   const adminKeyPreview = HashUtil.generateKeyPreview(adminKey);
 
