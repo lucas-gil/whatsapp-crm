@@ -25,23 +25,5 @@ export class AppController {
     return this.appService.getAdminPassword();
   }
 
-  @Get('/debug/admin-key')
-  getAdminKeyDebug() {
-    return this.appService.getAdminKeyDebug();
-  }
 
-  @Get('/debug/admin-key-test')
-  testAdminKeyBcrypt() {
-    return this.appService.testAdminKeyBcrypt();
-  }
-
-  @Post('/admin-key-reset')
-  resetAdminKey() {
-    return this.appService.resetAdminKey();
-  }
-
-  @Post('/admin-key-reset-simple')
-  resetAdminKeySimple() {
-    return this.appService.resetAdminKeySimple();
-  }
 }
