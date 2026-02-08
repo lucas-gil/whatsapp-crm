@@ -26,6 +26,8 @@ export class AuthService {
       throw new BadRequestException('Chave de acesso obrigatória');
     }
 
+    this.logger.info(`🔐 Login iniciado com chave: ${dto.key.substring(0, 8)}...`);
+
     // Buscar workspace
     const workspace = await this.prisma.workspace.findFirst({
       where: {
@@ -34,8 +36,11 @@ export class AuthService {
     });
 
     if (!workspace) {
+      this.logger.error(`❌ Workspace não encontrado: ${dto.workspaceSlug || 'default'}`);
       throw new NotFoundException('Workspace não encontrado');
     }
+
+    this.logger.info(`✅ Workspace encontrado: ${workspace.id}`);
 
     // Buscar a chave ADMIN
     const licenseKey = await this.prisma.licenseKey.findFirst({
@@ -47,18 +52,26 @@ export class AuthService {
     });
 
     if (!licenseKey) {
+      this.logger.error(`❌ Nenhuma chave ADMIN_INFINITE encontrada no workspace ${workspace.id}`);
       throw new UnauthorizedException('Nenhuma chave admin encontrada');
     }
 
+    this.logger.info(`✅ Chave encontrada: ${licenseKey.keyPreview}, Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
+
     // Comparar a chave com o hash usando bcrypt
+    this.logger.info(`🔍 Comparando chave fornecida com hash armazenado...`);
     const isKeyValid = await HashUtil.compare(dto.key, licenseKey.keyHash);
+    
     if (!isKeyValid) {
-      this.logger.error('❌ Chave inválida');
+      this.logger.error(`❌ Chave inválida! Fornecida: ${dto.key.substring(0, 8)}..., Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
       throw new UnauthorizedException('Chave inválida');
     }
 
+    this.logger.info(`✅ Chave validada com sucesso!`);
+
     // Verificar expiração
     if (licenseKey.expiresAt && new Date() > licenseKey.expiresAt) {
+      this.logger.error(`❌ Chave expirada: ${licenseKey.expiresAt}`);
       throw new UnauthorizedException('Chave expirada');
     }
 
@@ -68,6 +81,7 @@ export class AuthService {
         where: { id: licenseKey.id },
         data: { activatedAt: new Date() },
       });
+      this.logger.info(`✅ Primeira ativação marcada`);
     }
 
     // Atualizar última utilização
@@ -75,6 +89,7 @@ export class AuthService {
       where: { id: licenseKey.id },
       data: { lastUsedAt: new Date() },
     });
+    this.logger.info(`✅ Última utilização atualizada`);
 
     // Gerar JWT
     const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
@@ -87,6 +102,8 @@ export class AuthService {
       },
       { expiresIn: jwtExpiry },
     );
+
+    this.logger.info(`✅ JWT gerado: ${jwtToken.substring(0, 50)}...`);
 
     // Criar sessão
     const jwtExpiresAt = new Date();
@@ -104,7 +121,8 @@ export class AuthService {
       },
     });
 
-    this.logger.info(`✅ Login bem-sucedido - Admin access granted`);
+    this.logger.info(`✅ Sessão criada: ${session.id}`);
+    this.logger.info(`✅ Login bem-sucedido para ${ipAddress}`);
 
     return {
       accessToken: jwtToken,

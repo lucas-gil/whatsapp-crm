@@ -17,50 +17,9 @@ async function bootstrap() {
 
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);
-    const prisma = app.get(PrismaService);
     const logger = new Logger('Bootstrap');
 
     console.log('✅ Módulos carregados com sucesso');
-
-    // Executar seed se necessário
-    try {
-      console.log('🌱 Inicializando chave admin...');
-      
-      let workspace = await prisma.workspace.findFirst({ where: { slug: 'default' } });
-      
-      if (!workspace) {
-        workspace = await prisma.workspace.create({
-          data: { name: 'Default Workspace', slug: 'default' },
-        });
-      }
-      
-      // Verificar se já existe chave
-      let adminKey = await prisma.licenseKey.findFirst({
-        where: {
-          workspaceId: workspace.id,
-          type: 'ADMIN_INFINITE',
-        },
-      });
-      
-      // Se não existir, criar
-      if (!adminKey) {
-        adminKey = await prisma.licenseKey.create({
-          data: {
-            workspaceId: workspace.id,
-            keyHash: 'senha123', // Texto puro simples
-            keyPreview: 'senha123',
-            type: 'ADMIN_INFINITE',
-            expiresAt: null,
-            revokedAt: null,
-          },
-        });
-        console.log('✅ Chave admin criada: senha123');
-      } else {
-        console.log('✅ Chave admin já existe');
-      }
-    } catch (seedErr) {
-      console.error('❌ Erro ao executar seed:', seedErr instanceof Error ? seedErr.message : String(seedErr));
-    }
 
     // CORS
     app.enableCors({
