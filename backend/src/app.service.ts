@@ -8,41 +8,10 @@ export class AppService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAdminPassword() {
-    try {
-      const workspace = await this.prisma.workspace.findFirst({
-        where: { slug: 'default' },
-      });
-
-      if (!workspace) {
-        return { error: 'Workspace não encontrado' };
-      }
-
-      const adminKey = await this.prisma.licenseKey.findFirst({
-        where: {
-          workspaceId: workspace.id,
-          type: 'ADMIN_INFINITE',
-        },
-      });
-
-      if (!adminKey) {
-        return {
-          error: 'Nenhuma chave admin encontrada',
-          defaultPassword: 'admin123456',
-          instruction: 'Chame /force-reset-admin para criar a chave'
-        };
-      }
-
-      // Se existir, assumir que é admin123456 (a padrão)
-      return {
-        password: 'admin123456',
-        keyPreview: adminKey.keyPreview,
-        type: adminKey.type,
-        createdAt: adminKey.createdAt,
-        message: 'Use a senha acima para fazer login'
-      };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
-    }
+    return {
+      password: 'senha123',
+      message: 'Use esta senha para fazer login',
+    };
   }
 
   health() {
@@ -253,64 +222,37 @@ export class AppService {
 
   async forceResetAdmin() {
     try {
-      console.log('🔴 FORCE RESET - Deletando e recriando chave admin...');
-      
-      let workspace = await this.prisma.workspace.findFirst({
+      const workspace = await this.prisma.workspace.findFirst({
         where: { slug: 'default' },
       });
 
       if (!workspace) {
-        console.log('Criando workspace...');
-        workspace = await this.prisma.workspace.create({
-          data: { name: 'Default Workspace', slug: 'default' },
-        });
+        return { error: 'Workspace não encontrado' };
       }
 
-      // Deletar TODAS as chaves
-      const deletedCount = await this.prisma.licenseKey.deleteMany({
+      // Deletar antigas
+      await this.prisma.licenseKey.deleteMany({
         where: { workspaceId: workspace.id },
       });
 
-      console.log(`Deletadas ${deletedCount.count} chaves antigas`);
-
-      // Criar nova chave com hash manualmente testado
-      const plainKey = 'admin123456';
-      console.log(`Gerando hash para: ${plainKey}`);
-      
-      const hash = await bcrypt.hash(plainKey, 12);
-      console.log(`Hash gerado: ${hash}`);
-
-      // Testar o hash ANTES de salvar
-      const testMatch = await bcrypt.compare(plainKey, hash);
-      console.log(`🧪 Teste bcrypt: ${testMatch ? '✅ PASSOU' : '❌ FALHOU'}`);
-
-      if (!testMatch) {
-        return { error: 'Falha no teste bcrypt - hash não corresponde' };
-      }
-
-      // Salvar no banco
-      const newKey = await this.prisma.licenseKey.create({
+      // Criar nova com senha simples
+      await this.prisma.licenseKey.create({
         data: {
           workspaceId: workspace.id,
-          keyHash: hash,
-          keyPreview: 'admin1234****',
+          keyHash: 'senha123',
+          keyPreview: 'senha123',
           type: 'ADMIN_INFINITE',
           expiresAt: null,
           revokedAt: null,
         },
       });
 
-      console.log(`✅ Chave criada: ${newKey.id}`);
-
       return {
         success: true,
-        password: plainKey,
-        keyId: newKey.id,
-        testResult: testMatch,
-        message: `✅ CHAVE ADMIN RESETADA! Senha: ${plainKey}`,
+        password: 'senha123',
+        message: '✅ Chave admin resetada! Senha: senha123',
       };
     } catch (error) {
-      console.error('❌ Erro ao fazer force reset:', error);
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }

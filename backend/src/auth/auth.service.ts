@@ -22,13 +22,11 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
-    this.logger.info(`🔑 Tentativa de login com chave: ${dto.key.substring(0, 8)}...`);
-    
     if (!dto.key) {
       throw new BadRequestException('Chave de acesso obrigatória');
     }
 
-    // Buscar workspace (padrão ou pelo slug)
+    // Buscar workspace
     const workspace = await this.prisma.workspace.findFirst({
       where: {
         slug: dto.workspaceSlug || 'default',
@@ -36,72 +34,44 @@ export class AuthService {
     });
 
     if (!workspace) {
-      this.logger.error('Workspace não encontrado');
       throw new NotFoundException('Workspace não encontrado');
     }
 
-    this.logger.info(`✅ Workspace encontrado: ${workspace.slug} (${workspace.id})`);
-
-    // Buscar todas as chaves ativas dessa workspace (não revogadas, não expiradas)
-    const licenseKeys = await this.prisma.licenseKey.findMany({
+    // Buscar a chave ADMIN
+    const licenseKey = await this.prisma.licenseKey.findFirst({
       where: {
         workspaceId: workspace.id,
+        type: 'ADMIN_INFINITE',
         revokedAt: null,
       },
     });
 
-    this.logger.info(`📊 Chaves encontradas no workspace: ${licenseKeys.length}`);
-    licenseKeys.forEach((key: any, idx: number) => {
-      this.logger.info(`  [${idx + 1}] ${key.keyPreview} (tipo: ${key.type}, revogada: ${!!key.revokedAt})`);
-    });
-
-    if (licenseKeys.length === 0) {
-      this.logger.error('Nenhuma chave válida encontrada');
-      throw new UnauthorizedException('Nenhuma chave válida encontrada');
+    if (!licenseKey) {
+      throw new UnauthorizedException('Nenhuma chave admin encontrada');
     }
 
-    // Verificar qual chave corresponde
-    let validKey: any = null;
-    for (const keyRecord of licenseKeys) {
-      this.logger.info(`🔍 Comparando com ${keyRecord.keyPreview}...`);
-      const isMatch = await HashUtil.compare(dto.key, keyRecord.keyHash);
-      this.logger.info(`  → Resultado: ${isMatch ? '✅ MATCH' : '❌ SEM MATCH'}`);
-      if (isMatch) {
-        validKey = keyRecord;
-        break;
-      }
-    }
-
-    if (!validKey) {
-      this.logger.error('❌ Chave inválida - nenhuma correspondência encontrada');
+    // VALIDAÇÃO SIMPLES: comparar texto puro
+    if (dto.key !== licenseKey.keyHash) {
+      this.logger.error('❌ Chave inválida');
       throw new UnauthorizedException('Chave inválida');
     }
 
-    this.logger.info(`✅ Chave válida encontrada: ${validKey.keyPreview}`);
-
     // Verificar expiração
-    if (validKey.expiresAt && new Date() > validKey.expiresAt) {
-      this.logger.error(`❌ Chave expirada em: ${validKey.expiresAt}`);
+    if (licenseKey.expiresAt && new Date() > licenseKey.expiresAt) {
       throw new UnauthorizedException('Chave expirada');
     }
 
-    this.logger.info(`✅ Chave não expirada`);
-
-
-    // Determinar se é admin
-    const isAdmin = validKey.type === 'ADMIN_INFINITE';
-
     // Marcar primeira ativação se necessário
-    if (!validKey.activatedAt) {
+    if (!licenseKey.activatedAt) {
       await this.prisma.licenseKey.update({
-        where: { id: validKey.id },
+        where: { id: licenseKey.id },
         data: { activatedAt: new Date() },
       });
     }
 
     // Atualizar última utilização
     await this.prisma.licenseKey.update({
-      where: { id: validKey.id },
+      where: { id: licenseKey.id },
       data: { lastUsedAt: new Date() },
     });
 
@@ -109,10 +79,10 @@ export class AuthService {
     const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
     const jwtToken = this.jwtService.sign(
       {
-        sub: validKey.id,
+        sub: licenseKey.id,
         workspaceId: workspace.id,
-        licenseKeyId: validKey.id,
-        isAdmin,
+        licenseKeyId: licenseKey.id,
+        isAdmin: true,
       },
       { expiresIn: jwtExpiry },
     );
@@ -124,36 +94,24 @@ export class AuthService {
     const session = await this.prisma.userSession.create({
       data: {
         workspaceId: workspace.id,
-        licenseKeyId: validKey.id,
+        licenseKeyId: licenseKey.id,
         jwtToken,
         jwtExpiresAt,
         ipAddress,
         userAgent,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dias
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 
-    // Log de auditoria
-    await this.prisma.auditLog.create({
-      data: {
-        licenseKeyId: validKey.id,
-        action: 'LOGIN',
-        ipAddress,
-        userAgent,
-      },
-    });
-
-    this.logger.info(
-      `Login bem-sucedido - Workspace: ${workspace.slug}, Admin: ${isAdmin}`,
-    );
+    this.logger.info(`✅ Login bem-sucedido - Admin access granted`);
 
     return {
       accessToken: jwtToken,
       tokenType: 'Bearer',
-      expiresIn: 86400, // 24 horas em segundos
+      expiresIn: 86400,
       workspaceId: workspace.id,
       workspaceName: workspace.name,
-      isAdmin,
+      isAdmin: true,
     };
   }
 

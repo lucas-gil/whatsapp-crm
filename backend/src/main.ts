@@ -24,47 +24,39 @@ async function bootstrap() {
 
     // Executar seed se necessário
     try {
-      console.log('🌱 Verificando/criando chave admin...');
+      console.log('🌱 Inicializando chave admin...');
       
       let workspace = await prisma.workspace.findFirst({ where: { slug: 'default' } });
       
       if (!workspace) {
-        console.log('📦 Criando workspace padrão...');
         workspace = await prisma.workspace.create({
           data: { name: 'Default Workspace', slug: 'default' },
         });
       }
       
-      // Verificar se já existe chave ADMIN_INFINITE
-      const existingAdminKey = await prisma.licenseKey.findFirst({
+      // Verificar se já existe chave
+      let adminKey = await prisma.licenseKey.findFirst({
         where: {
           workspaceId: workspace.id,
           type: 'ADMIN_INFINITE',
         },
       });
       
-      if (!existingAdminKey) {
-        // SEMPRE usar SENHA PADRÃO conhecida
-        const adminKeyValue = 'admin123456';
-        const adminKeyHash = await bcrypt.hash(adminKeyValue, 12);
-        const adminKeyPreview = 'admin1234****';
-        
-        console.log(`✅ Criando chave admin com senha: admin123456`);
-        
-        await prisma.licenseKey.create({
+      // Se não existir, criar
+      if (!adminKey) {
+        adminKey = await prisma.licenseKey.create({
           data: {
             workspaceId: workspace.id,
-            keyHash: adminKeyHash,
-            keyPreview: adminKeyPreview,
+            keyHash: 'senha123', // Texto puro simples
+            keyPreview: 'senha123',
             type: 'ADMIN_INFINITE',
             expiresAt: null,
             revokedAt: null,
           },
         });
-        
-        console.log(`✅ Chave admin criada com sucesso! Senha: admin123456`);
+        console.log('✅ Chave admin criada: senha123');
       } else {
-        console.log(`✅ Chave admin já existe: ${existingAdminKey.keyPreview}`);
+        console.log('✅ Chave admin já existe');
       }
     } catch (seedErr) {
       console.error('❌ Erro ao executar seed:', seedErr instanceof Error ? seedErr.message : String(seedErr));
