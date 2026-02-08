@@ -104,6 +104,28 @@ echo "priority=999" >> /etc/supervisor/conf.d/supervisord.conf'
 # Setup permissions - but keep root for nginx and supervisor
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 
+# Create entrypoint script to run migrations
+RUN echo '#!/bin/bash' > /entrypoint.sh && \
+echo 'set -e' >> /entrypoint.sh && \
+echo 'echo "🔄 Aguardando banco de dados..."' >> /entrypoint.sh && \
+echo 'for i in {1..30}; do' >> /entrypoint.sh && \
+echo '  if nc -z db 5432; then' >> /entrypoint.sh && \
+echo '    echo "✅ Banco disponível"' >> /entrypoint.sh && \
+echo '    break' >> /entrypoint.sh && \
+echo '  fi' >> /entrypoint.sh && \
+echo '  sleep 1' >> /entrypoint.sh && \
+echo 'done' >> /entrypoint.sh && \
+echo 'echo "🔄 Rodando migrations do Prisma..."' >> /entrypoint.sh && \
+echo 'cd /app/backend && npx prisma migrate deploy || true' >> /entrypoint.sh && \
+echo 'echo "🔄 Inicializando banco de dados..."' >> /entrypoint.sh && \
+echo 'cd /app/backend && npx ts-node src/scripts/init-db.ts || true' >> /entrypoint.sh && \
+echo 'echo "✅ Banco inicializado!"' >> /entrypoint.sh && \
+echo 'exec supervisord -c /etc/supervisor/conf.d/supervisord.conf' >> /entrypoint.sh && \
+chmod +x /entrypoint.sh
+
+# Install netcat for database checks
+RUN apt-get update && apt-get install -y --no-install-recommends netcat-traditional && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 # Don't switch to nodejs user - supervisor needs to run as root to manage nginx
 
@@ -111,4 +133,4 @@ EXPOSE 80
 # Removed HEALTHCHECK as it was causing container restarts
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/entrypoint.sh"]
