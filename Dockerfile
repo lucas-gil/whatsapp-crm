@@ -104,9 +104,6 @@ RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 WORKDIR /app
 # Don't switch to nodejs user - supervisor needs to run as root to manage nginx
 
-# Set admin key for seed - CHANGE THIS IN PRODUCTION!
-ENV ADMIN_KEY=verde96321verde96321verde96321verde
-
 EXPOSE 80
 # Removed HEALTHCHECK as it was causing container restarts
 

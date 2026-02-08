@@ -45,16 +45,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-        </div>
-      </div>
-
-      {/* Mensagens */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div>
-          <p className="text-gray-500 text-sm">📨 Mensagens</p>
-          <p className="text-3xl font-bold text-blue-500">{stats?.messages || 0}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
