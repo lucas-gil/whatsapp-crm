@@ -25,5 +25,10 @@ export class AppController {
     return this.appService.getAdminPassword();
   }
 
+  @Get('/api/debug/check-hash')
+  debugCheckHash() {
+    return this.appService.debugCheckHash();
+  }
+
 
 }

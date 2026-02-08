@@ -73,4 +73,51 @@ export class AppService {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
     }
   }
+
+  async debugCheckHash() {
+    try {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
+
+      if (!workspace) {
+        return { error: 'Workspace não encontrado' };
+      }
+
+      const licenseKey = await this.prisma.licenseKey.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
+      });
+
+      if (!licenseKey) {
+        return { error: 'Chave admin não encontrada no banco' };
+      }
+
+      // Testar comparação do bcrypt
+      const isValid = await bcrypt.compare(this.ADMIN_KEY, licenseKey.keyHash);
+
+      return {
+        keyFound: true,
+        keyPreview: licenseKey.keyPreview,
+        hashExists: !!licenseKey.keyHash,
+        hashStartsWith: licenseKey.keyHash.substring(0, 30) + '...',
+        bcryptCompareResult: isValid,
+        attempts: [
+          {
+            attempt: `Direct key: ${this.ADMIN_KEY}`,
+            result: await bcrypt.compare(this.ADMIN_KEY, licenseKey.keyHash),
+          },
+          {
+            attempt: `With trim: ${this.ADMIN_KEY.trim()}`,
+            result: await bcrypt.compare(this.ADMIN_KEY.trim(), licenseKey.keyHash),
+          },
+        ],
+        message: isValid ? '✅ Chave é válida!' : '❌ Chave não confere com o hash',
+      };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
+    }
+  }
 }
