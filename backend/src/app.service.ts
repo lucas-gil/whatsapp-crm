@@ -96,24 +96,25 @@ export class AppService {
       }
 
       // Testar comparação do bcrypt
-      const test1 = await bcrypt.compare(this.ADMIN_KEY, licenseKey.keyHash);
-      const test2 = await bcrypt.compare(this.ADMIN_KEY.trim(), licenseKey.keyHash);
-      const test3 = await bcrypt.compare(this.ADMIN_KEY.trim().toLowerCase(), licenseKey.keyHash);
+      const isValid = await bcrypt.compare(this.ADMIN_KEY, licenseKey.keyHash);
 
       return {
         keyFound: true,
-        storedKeyPreview: licenseKey.keyPreview,
-        adminKeyLength: this.ADMIN_KEY.length,
-        adminKeyFirst8: this.ADMIN_KEY.substring(0, 8),
+        keyPreview: licenseKey.keyPreview,
         hashExists: !!licenseKey.keyHash,
         hashStartsWith: licenseKey.keyHash.substring(0, 30) + '...',
-        tests: {
-          directMatch: test1,
-          withTrim: test2,
-          withTrimAndLowercase: test3,
-        },
-        message: test1 ? '✅ Chave é válida!' : '❌ Falha na comparação - verifique o hash no banco',
-        suggestion: test1 ? 'Hash está correto, problema pode estar no frontend ou rede' : 'Hash pode estar corrompido, tente resetar com /api/force-reset-admin',
+        bcryptCompareResult: isValid,
+        attempts: [
+          {
+            attempt: `Direct key: ${this.ADMIN_KEY}`,
+            result: await bcrypt.compare(this.ADMIN_KEY, licenseKey.keyHash),
+          },
+          {
+            attempt: `With trim: ${this.ADMIN_KEY.trim()}`,
+            result: await bcrypt.compare(this.ADMIN_KEY.trim(), licenseKey.keyHash),
+          },
+        ],
+        message: isValid ? '✅ Chave é válida!' : '❌ Chave não confere com o hash',
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
