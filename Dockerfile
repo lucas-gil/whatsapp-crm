@@ -118,10 +118,10 @@ echo '    break' >> /entrypoint.sh && \
 echo '  fi' >> /entrypoint.sh && \
 echo '  sleep 1' >> /entrypoint.sh && \
 echo 'done' >> /entrypoint.sh && \
-echo 'echo "🔄 Rodando migrations do Prisma..."' >> /entrypoint.sh && \
-echo 'cd /app/backend && npx prisma migrate deploy || true' >> /entrypoint.sh && \
+echo 'echo "🔄 Sincronizando schema do Prisma..."' >> /entrypoint.sh && \
+echo 'cd /app/backend && npx prisma db push --skip-generate || true' >> /entrypoint.sh && \
 echo 'echo "🔄 Inicializando banco de dados..."' >> /entrypoint.sh && \
-echo 'cd /app/backend && npx ts-node src/scripts/init-db.ts || true' >> /entrypoint.sh && \
+echo 'cd /app/backend && npx ts-node --transpile-only --skip-project src/scripts/init-db.ts || true' >> /entrypoint.sh && \
 echo 'echo "✅ Banco inicializado!"' >> /entrypoint.sh && \
 echo 'exec supervisord -c /etc/supervisor/conf.d/supervisord.conf' >> /entrypoint.sh && \
 chmod +x /entrypoint.sh
