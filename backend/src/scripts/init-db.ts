@@ -68,6 +68,7 @@ async function initializeDatabase() {
         workspaceId: workspace.id,
         isEnabled: false,
         systemPrompt: 'Você é um assistente atencioso e profissional.',
+        apiKey: '', // Será configurado pelo usuário depois
       },
     });
 
