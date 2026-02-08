@@ -35,6 +35,7 @@ WORKDIR /
 RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/backend/dist /app/backend/ && \
     cp -r /build/backend/node_modules /app/backend/ && \
+    cp -r /build/backend/prisma /app/backend/ && \
     cp /build/backend/package.json /app/backend/ && \
     cp -r /build/frontend/.next /app/frontend/ && \
     cp -r /build/frontend/node_modules /app/frontend/ && \

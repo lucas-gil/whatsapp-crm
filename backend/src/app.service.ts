@@ -1,14 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AppService {
+  private readonly ADMIN_KEY = 'admin123456789admin123456789admin1';
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getAdminPassword() {
     return {
-      password: 'senha123',
-      message: 'Use esta senha para fazer login',
+      key: this.ADMIN_KEY,
+      message: `🔑 Chave admin: ${this.ADMIN_KEY.substring(0, 8)}...${this.ADMIN_KEY.substring(this.ADMIN_KEY.length - 4)}`,
     };
   }
 
@@ -36,17 +39,24 @@ export class AppService {
         return { error: 'Workspace não encontrado' };
       }
 
-      // Deletar antigas
+      // Hash da chave admin com bcrypt
+      const adminKeyHash = await bcrypt.hash(this.ADMIN_KEY, 12);
+      const adminKeyPreview = `${this.ADMIN_KEY.substring(0, 8)}...${this.ADMIN_KEY.substring(this.ADMIN_KEY.length - 4)}`;
+
+      // Deletar antiga
       await this.prisma.licenseKey.deleteMany({
-        where: { workspaceId: workspace.id },
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+        },
       });
 
-      // Criar nova com senha simples
+      // Criar nova com hash bcrypt correto
       await this.prisma.licenseKey.create({
         data: {
           workspaceId: workspace.id,
-          keyHash: 'senha123',
-          keyPreview: 'senha123',
+          keyHash: adminKeyHash,
+          keyPreview: adminKeyPreview,
           type: 'ADMIN_INFINITE',
           expiresAt: null,
           revokedAt: null,
@@ -55,8 +65,9 @@ export class AppService {
 
       return {
         success: true,
-        password: 'senha123',
-        message: '✅ Chave admin resetada! Senha: senha123',
+        key: this.ADMIN_KEY,
+        preview: adminKeyPreview,
+        message: `✅ Chave admin resetada! Use: ${this.ADMIN_KEY}`,
       };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Erro desconhecido' };
