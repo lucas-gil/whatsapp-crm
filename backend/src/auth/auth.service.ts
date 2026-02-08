@@ -63,10 +63,20 @@ export class AuthService {
 
     // Comparar a chave com o hash usando bcrypt
     this.logger.info(`🔍 Comparando chave fornecida com hash armazenado...`);
+    this.logger.info(`   Chave fornecida (primeiros 8): ${cleanKey.substring(0, 8)}`);
+    this.logger.info(`   Tamanho da chave: ${cleanKey.length}`);
+    this.logger.info(`   Hash no banco (primeiros 30): ${licenseKey.keyHash.substring(0, 30)}`);
+    
     const isKeyValid = await HashUtil.compare(cleanKey, licenseKey.keyHash);
     
+    this.logger.info(`   Resultado da comparação: ${isKeyValid ? '✅ VÁLIDA' : '❌ INVÁLIDA'}`);
+    
     if (!isKeyValid) {
-      this.logger.error(`❌ Chave inválida! Fornecida: ${cleanKey.substring(0, 8)}..., Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
+      this.logger.error(`❌ Chave inválida! Comparação bcrypt retornou false`);
+      // Tentar novamente com trim() adicional por segurança
+      const doubleClean = cleanKey.trim();
+      const retryCompare = await HashUtil.compare(doubleClean, licenseKey.keyHash);
+      this.logger.error(`   Retry com double-trim: ${retryCompare}`);
       throw new UnauthorizedException('Chave inválida');
     }
 
