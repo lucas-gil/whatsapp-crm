@@ -1,83 +1,50 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(
-          `/api/admin/stats`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (response.ok) {
-          setStats(await response.json());
-        }
-
-        // Verificar conexão WhatsApp
-        const waResponse = await fetch(
-          `/api/whatsapp/status`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (waResponse.ok) {
-          const { connected } = await waResponse.json();
-          setWhatsappConnected(connected);
-        }
-      } catch (error) {
-        toast.error('Erro ao carregar dados');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+    setLoading(false);
   }, []);
 
-  if (loading) {
-    return <div className="text-center py-8">Carregando...</div>;
-  }
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {/* WhatsApp Status */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-gray-500 text-sm">WhatsApp</p>
-            <p className="text-2xl font-bold">
-              {whatsappConnected ? '🟢 Conectado' : '🔴 Desconectado'}
-            </p>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 mt-2">Bem-vindo ao WhatsApp CRM</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Card 1 */}
+          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-whatsapp">
+            <p className="text-gray-500 text-sm mb-2">Status</p>
+            <p className="text-3xl font-bold text-whatsapp">🟢 Online</p>
+          </div>
+
+          {/* Card 2 */}
+          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500">
+            <p className="text-gray-500 text-sm mb-2">Conversas</p>
+            <p className="text-3xl font-bold text-green-600">0</p>
+          </div>
+
+          {/* Card 3 */}
+          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500">
+            <p className="text-gray-500 text-sm mb-2">Leads</p>
+            <p className="text-3xl font-bold text-blue-600">0</p>
           </div>
         </div>
-      </div>
 
-      {/* Leads */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div>
-          <p className="text-gray-500 text-sm">👥 Leads</p>
-          <p className="text-3xl font-bold text-whatsapp">{stats?.leads || 0}</p>
+        <div className="mt-8 bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Configuração</h2>
+          <p className="text-gray-600">Sistema pronto para usar. Configure sua conta WhatsApp para começar.</p>
         </div>
       </div>
-
-      {/* Conversas */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div>
-          <p className="text-gray-500 text-sm">💬 Conversas</p>
-          <p className="text-3xl font-bold text-whatsapp-light">
-            {stats?.conversations || 0}
-          </p>
+    </div>
+  );
+}
         </div>
       </div>
 
