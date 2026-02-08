@@ -16,6 +16,7 @@ export class AppController {
   }
 
   @Post('/api/force-reset-admin')
+  @Get('/api/force-reset-admin')
   forceResetAdmin() {
     return this.appService.forceResetAdmin();
   }
