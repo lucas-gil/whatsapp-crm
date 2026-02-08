@@ -26,7 +26,10 @@ export class AuthService {
       throw new BadRequestException('Chave de acesso obrigatória');
     }
 
-    this.logger.info(`🔐 Login iniciado com chave: ${dto.key.substring(0, 8)}...`);
+    // Remover espaços extras da chave
+    const cleanKey = dto.key.trim();
+
+    this.logger.info(`🔐 Login iniciado com chave: ${cleanKey.substring(0, 8)}...`);
 
     // Buscar workspace
     const workspace = await this.prisma.workspace.findFirst({
@@ -60,10 +63,10 @@ export class AuthService {
 
     // Comparar a chave com o hash usando bcrypt
     this.logger.info(`🔍 Comparando chave fornecida com hash armazenado...`);
-    const isKeyValid = await HashUtil.compare(dto.key, licenseKey.keyHash);
+    const isKeyValid = await HashUtil.compare(cleanKey, licenseKey.keyHash);
     
     if (!isKeyValid) {
-      this.logger.error(`❌ Chave inválida! Fornecida: ${dto.key.substring(0, 8)}..., Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
+      this.logger.error(`❌ Chave inválida! Fornecida: ${cleanKey.substring(0, 8)}..., Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
       throw new UnauthorizedException('Chave inválida');
     }
 
