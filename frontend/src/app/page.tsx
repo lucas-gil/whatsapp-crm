@@ -1,53 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
 
-export default function LoginPage() {
-  const [key, setKey] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function HomePage() {
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const response = await fetch(
-        `/api/auth/login`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, workspaceSlug: 'default' }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Chave inválida ou expirada');
-      }
-
-      const data = await response.json();
-      localStorage.setItem('token', data.accessToken);
-      localStorage.setItem('workspaceId', data.workspaceId);
-      localStorage.setItem('isAdmin', data.isAdmin);
-
-      toast.success('Login realizado com sucesso!');
-      router.push('/dashboard');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erro ao fazer login');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    // Redireciona direto para o dashboard sem autenticação
+    router.push('/dashboard');
+  }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-whatsapp to-whatsapp-dark">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-whatsapp">WhatsApp CRM</h1>
-          <p className="text-gray-500 mt-2">Conecte via chave de acesso</p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-whatsapp">WhatsApp CRM</h1>
+        <p className="text-gray-500 mt-2">Carregando...</p>
+      </div>
+    </div>
+  );
+}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
