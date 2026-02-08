@@ -16,7 +16,12 @@ export default function HomePage() {
 
     try {
       // Fazer login com a chave de licença
-      const response = await fetch('/api/auth/login', {
+      // Em produção, usa o mesmo domínio (Nginx faz routing) | Em dev, localhost:3000
+      const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? 'http://localhost:3000'
+        : `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}`;
+      
+      const response = await fetch(`${apiUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: licenseKey }),

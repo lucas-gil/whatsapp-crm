@@ -59,7 +59,8 @@ echo "  proxy_connect_timeout 90s;" >> /etc/nginx/conf.d/default.conf && \
 echo "  proxy_send_timeout 90s;" >> /etc/nginx/conf.d/default.conf && \
 echo "  proxy_read_timeout 90s;" >> /etc/nginx/conf.d/default.conf && \
 echo "  proxy_buffering off;" >> /etc/nginx/conf.d/default.conf && \
-echo "  location /api/ { proxy_pass http://api; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; proxy_connect_timeout 90s; proxy_read_timeout 90s; }" >> /etc/nginx/conf.d/default.conf && \
+echo "  location ~ ^/(auth|crm|admin|whatsapp|gemini|license|health|version|api)/ { proxy_pass http://api; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; proxy_connect_timeout 90s; proxy_read_timeout 90s; }" >> /etc/nginx/conf.d/default.conf && \
+echo "  location / { proxy_pass http://web; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }" >> /etc/nginx/conf.d/default.conf && \
 echo "  location / { proxy_pass http://web; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }" >> /etc/nginx/conf.d/default.conf && \
 echo "  location /health { access_log off; return 200 \"OK\"; add_header Content-Type text/plain; }" >> /etc/nginx/conf.d/default.conf && \
 echo "}" >> /etc/nginx/conf.d/default.conf'
