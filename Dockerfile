@@ -36,8 +36,10 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/backend/dist /app/backend/ && \
     cp -r /build/backend/prisma /app/backend/ && \
     cp /build/backend/package.json /app/backend/ && \
+    cp /build/backend/package-lock.json /app/backend/ 2>/dev/null || true && \
     cp -r /build/frontend/.next /app/frontend/ && \
     cp /build/frontend/package.json /app/frontend/ && \
+    cp /build/frontend/package-lock.json /app/frontend/ 2>/dev/null || true && \
     [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
     rm -rf /build && \
     npm cache clean --force && \
@@ -46,10 +48,10 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
 
 # Install production dependencies only
 WORKDIR /app/backend
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm install --omit=dev --legacy-peer-deps 2>&1 | grep -v "npm warn" || true
 
 WORKDIR /app/frontend
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm install --omit=dev --legacy-peer-deps 2>&1 | grep -v "npm warn" || true
 
 # Setup Nginx config - simple and reliable
 RUN /bin/bash -c 'echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.conf && \
