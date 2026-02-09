@@ -30,23 +30,26 @@ RUN npm install --legacy-peer-deps && npm run build
 WORKDIR /build/frontend
 RUN npm install --legacy-peer-deps && npm run build
 
-# Copy to final location
+# Copy to final location - OPTIMIZED for space
 WORKDIR /
 RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/backend/dist /app/backend/ && \
-    cp -r /build/backend/src /app/backend/ && \
-    cp -r /build/backend/node_modules /app/backend/ && \
     cp -r /build/backend/prisma /app/backend/ && \
     cp /build/backend/package.json /app/backend/ && \
-    cp /build/backend/tsconfig.json /app/backend/ && \
     cp -r /build/frontend/.next /app/frontend/ && \
-    cp -r /build/frontend/node_modules /app/frontend/ && \
     cp /build/frontend/package.json /app/frontend/ && \
     [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
     rm -rf /build && \
     npm cache clean --force && \
     find /app -type f -name "*.map" -delete && \
     find /app -type d -name ".next/cache" -exec rm -rf {} + 2>/dev/null || true
+
+# Install production dependencies only
+WORKDIR /app/backend
+RUN npm ci --only=production --legacy-peer-deps
+
+WORKDIR /app/frontend
+RUN npm ci --only=production --legacy-peer-deps
 
 # Setup Nginx config - simple and reliable
 RUN /bin/bash -c 'echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.conf && \
