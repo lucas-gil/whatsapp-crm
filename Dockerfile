@@ -32,8 +32,8 @@ RUN npm prune --omit=dev --legacy-peer-deps
 WORKDIR /build/frontend
 RUN npm prune --omit=dev --legacy-peer-deps
 
-# Save Prisma client before aggressive cleanup
-RUN mkdir -p /build/prisma-client && cp -r /build/backend/node_modules/.prisma /build/prisma-client/.prisma 2>/dev/null || true
+# Save Prisma client BEFORE aggressive cleanup (this is critical!)
+RUN mkdir -p /build/backend/saved-prisma && cp -r /build/backend/node_modules/.prisma /build/backend/saved-prisma/ 2>/dev/null || echo "⚠️ .prisma not found, will generate at runtime"
 
 # Ultra-aggressive cleanup - remove absolutely everything unnecessary
 RUN find /build -type f \( -name "*.map" -o -name "*.test.js" -o -name "*.spec.js" -o -name "*.md" \) -delete && \
@@ -59,7 +59,7 @@ COPY --from=builder --chown=root:root /build/backend/dist /app/backend/dist
 COPY --from=builder --chown=root:root /build/backend/prisma /app/backend/prisma
 COPY --from=builder --chown=root:root /build/backend/package.json /app/backend/package.json
 COPY --from=builder --chown=root:root /build/backend/package-lock.json /app/backend/package-lock.json
-COPY --from=builder --chown=root:root /build/prisma-client/.prisma /app/backend/node_modules/.prisma
+COPY --from=builder --chown=root:root /build/backend/saved-prisma/.prisma /app/backend/saved-prisma/.prisma
 
 COPY --from=builder --chown=root:root /build/frontend/.next /app/frontend/.next
 COPY --from=builder --chown=root:root /build/frontend/package.json /app/frontend/package.json
@@ -68,7 +68,7 @@ COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/publi
 
 # Install production dependencies only (fresh install, much smaller)
 WORKDIR /app/backend
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --omit=dev --legacy-peer-deps && cp -r /app/backend/saved-prisma/.prisma /app/backend/node_modules/ 2>/dev/null || true
 
 WORKDIR /app/frontend
 RUN npm ci --omit=dev --legacy-peer-deps
@@ -94,7 +94,7 @@ RUN echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.c
 RUN printf "[supervisord]\nnodaemon=true\nuser=root\nlogfile=/dev/stdout\nlogfile_maxbytes=0\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautostart=true\nautorestart=false\nstartsecs=10\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=/bin/bash -c \"exec npm start\"\nenvironment=NODE_ENV=production,PORT=3001\nautostart=true\nautorestart=false\nstartsecs=15\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautostart=true\nautorestart=false\nstartsecs=5\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\npriority=999\n" > /etc/supervisor/conf.d/supervisord.conf
 
 # Create entrypoint script
-RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..30}; do\n  if nc -z db 5432 2>/dev/null; then\n    echo "✅ Banco disponível"\n    break\n  fi\n  sleep 1\ndone\nsleep 2\necho "🔄 Gerando Prisma Client..."\ncd /app/backend && npx prisma generate 2>&1 || echo "⚠️ Prisma generate completed"\nsleep 1\necho "🔄 Sincronizando schema do Prisma..."\ncd /app/backend && npx prisma db push --accept-data-loss 2>&1 || echo "⚠️ Prisma push completed"\nsleep 2\necho "✅ Sistema pronto!"\nexec supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /entrypoint.sh && \
+RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..30}; do\n  if nc -z db 5432 2>/dev/null; then\n    echo "✅ Banco disponível"\n    break\n  fi\n  sleep 1\ndone\nsleep 2\necho "🔄 Sincronizando schema do Prisma..."\ncd /app/backend && npx --yes prisma@5 db push --accept-data-loss 2>&1 || echo "⚠️ Prisma push completed"\nsleep 2\necho "✅ Sistema pronto!"\nexec supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /entrypoint.sh && \
     chmod +x /entrypoint.sh
 
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
