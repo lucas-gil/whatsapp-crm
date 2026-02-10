@@ -14,13 +14,13 @@ WORKDIR /build
 RUN echo "Building at ${BUILD_DATE} from commit ${GIT_COMMIT}"
 RUN git clone https://github.com/lucas-gil/whatsapp-crm.git . 
 
-# Build backend with ci for deterministic install
+# Build backend - use install to update lock file with new dependencies
 WORKDIR /build/backend
-RUN npm ci --legacy-peer-deps && npm run build
+RUN npm install --legacy-peer-deps && npm run build
 
-# Build frontend with ci
+# Build frontend - use install to update lock file
 WORKDIR /build/frontend
-RUN npm ci --legacy-peer-deps && npm run build
+RUN npm install --legacy-peer-deps && npm run build
 
 # Ensure public directory exists (even if empty)
 RUN mkdir -p /build/frontend/public
