@@ -7,14 +7,11 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   Request,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
-import { JwtAuthGuard } from '../../auth/jwt.guard';
 
 @Controller('crm/leads')
-@UseGuards(JwtAuthGuard)
 export class LeadsController {
   constructor(private leadsService: LeadsService) {}
 

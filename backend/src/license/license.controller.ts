@@ -5,16 +5,13 @@ import {
   Delete,
   Param,
   Body,
-  UseGuards,
   Request,
   ForbiddenException,
 } from '@nestjs/common';
 import { LicenseService } from './license.service';
 import { CreateLicenseDto } from './dto/create-license.dto';
-import { JwtAuthGuard } from '@auth/jwt.guard';
 
 @Controller('licenses')
-@UseGuards(JwtAuthGuard)
 export class LicenseController {
   constructor(private licenseService: LicenseService) {}
 

@@ -3,15 +3,12 @@ import {
   Get,
   Post,
   Put,
-  UseGuards,
   Request,
   Body,
 } from '@nestjs/common';
 import { GeminiService } from './gemini.service';
-import { JwtAuthGuard } from '@auth/jwt.guard';
 
 @Controller('settings/gemini')
-@UseGuards(JwtAuthGuard)
 export class GeminiController {
   constructor(private geminiService: GeminiService) {}
 

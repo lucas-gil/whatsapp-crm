@@ -4,14 +4,12 @@ import {
   Post,
   Param,
   Body,
-  UseGuards,
   Request,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { WhatsAppService } from './whatsapp.service';
-import { JwtAuthGuard } from '../auth/jwt.guard';
 
 interface AuthRequest {
   user: {
@@ -21,7 +19,6 @@ interface AuthRequest {
 }
 
 @Controller('whatsapp')
-@UseGuards(JwtAuthGuard)
 export class WhatsAppController {
   constructor(private whatsAppService: WhatsAppService) {}
 

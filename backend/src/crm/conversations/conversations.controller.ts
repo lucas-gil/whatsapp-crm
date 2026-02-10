@@ -6,14 +6,11 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   Request,
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
-import { JwtAuthGuard } from '@auth/jwt.guard';
 
 @Controller('crm/conversations')
-@UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private conversationsService: ConversationsService) {}
 
