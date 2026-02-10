@@ -19,6 +19,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <a href="/dashboard/disparos" className="block px-4 py-2 rounded hover:bg-whatsapp-dark">
             📢 Disparos
           </a>
+          <a href="/dashboard/whatsapp" className="block px-4 py-2 rounded hover:bg-whatsapp-dark">
+            📱 WhatsApp
+          </a>
           <a href="/dashboard/configuracoes" className="block px-4 py-2 rounded hover:bg-whatsapp-dark">
             ⚙️ Configurações
           </a>

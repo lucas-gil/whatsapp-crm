@@ -1,0 +1,119 @@
+import { useEffect, useCallback, useState } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+export interface WhatsAppEvent {
+  type: 'qr_updated' | 'connection_status' | 'message_received' | 'message_status' | 'message_sent';
+  payload: any;
+}
+
+export function useWhatsAppWebSocket(token: string | null) {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [events, setEvents] = useState<WhatsAppEvent[]>([]);
+
+  const onEvent = useCallback(
+    (type: WhatsAppEvent['type'], handler: (payload: any) => void) => {
+      if (socket) {
+        socket.on(type, handler);
+        return () => {
+          socket.off(type, handler);
+        };
+      }
+    },
+    [socket],
+  );
+
+  useEffect(() => {
+    if (!token) return;
+
+    try {
+      const socketIo = io('http://localhost', {
+        path: '/socket.io',
+        namespace: '/whatsapp',
+        query: {
+          token,
+        },
+        auth: {
+          token,
+        },
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+      });
+
+      socketIo.on('connect', () => {
+        console.log('✅ WebSocket conectado');
+        setConnected(true);
+
+        // Subscribe para eventos
+        socketIo.emit('subscribe', { token });
+      });
+
+      socketIo.on('disconnect', () => {
+        console.log('❌ WebSocket desconectado');
+        setConnected(false);
+      });
+
+      socketIo.on('subscribed', (data) => {
+        console.log('📡 Subscribed:', data);
+      });
+
+      socketIo.on('error', (error) => {
+        console.error('❌ Erro WebSocket:', error);
+      });
+
+      // Listeners de eventos
+      socketIo.on('qr_updated', (payload) => {
+        setEvents((prev) => [
+          ...prev,
+          { type: 'qr_updated', payload },
+        ]);
+      });
+
+      socketIo.on('connection_status', (payload) => {
+        setEvents((prev) => [
+          ...prev,
+          { type: 'connection_status', payload },
+        ]);
+      });
+
+      socketIo.on('message_received', (payload) => {
+        setEvents((prev) => [
+          ...prev,
+          { type: 'message_received', payload },
+        ]);
+      });
+
+      socketIo.on('message_status', (payload) => {
+        setEvents((prev) => [
+          ...prev,
+          { type: 'message_status', payload },
+        ]);
+      });
+
+      socketIo.on('message_sent', (payload) => {
+        setEvents((prev) => [
+          ...prev,
+          { type: 'message_sent', payload },
+        ]);
+      });
+
+      setSocket(socketIo);
+
+      return () => {
+        socketIo.emit('unsubscribe');
+        socketIo.disconnect();
+      };
+    } catch (error) {
+      console.error('Erro ao conectar WebSocket:', error);
+    }
+  }, [token]);
+
+  return {
+    socket,
+    connected,
+    events,
+    onEvent,
+  };
+}

@@ -7,45 +7,99 @@ import {
   Request,
   UploadedFile,
   UseInterceptors,
+  UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { WhatsAppService } from './whatsapp.service';
-
-interface AuthRequest {
-  user: {
-    workspaceId: string;
-    id: string;
-  };
-}
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('whatsapp')
+@UseGuards(JwtAuthGuard)
 export class WhatsAppController {
   constructor(private whatsAppService: WhatsAppService) {}
 
-  @Post('init')
-  async init(@Request() req: any) {
-    return this.whatsAppService.initializeWorkspace(req.user.workspaceId);
+  /**
+   * Iniciar conexão QR Code
+   */
+  @Post('connect-qr')
+  async connectQR(@Request() req: any) {
+    const workspaceId = req.user.workspaceId;
+    const settings = await this.whatsAppService.initializeWorkspace(workspaceId);
+    return {
+      status: 'initializing',
+      message: 'Escaneie o código QR com seu WhatsApp',
+      settings,
+    };
   }
 
+  /**
+   * Obter QR Code atual
+   */
   @Get('qr-code')
   async getQRCode(@Request() req: any) {
-    const qr = await this.whatsAppService.getQRCode(req.user.workspaceId);
-    return { qrCode: qr };
+    const workspaceId = req.user.workspaceId;
+    const qrCode = await this.whatsAppService.getQRCode(workspaceId);
+
+    if (!qrCode) {
+      return {
+        status: 'connected',
+        qrCode: null,
+        message: 'WhatsApp já está conectado',
+      };
+    }
+
+    return {
+      status: 'waiting',
+      qrCode, // data URL da imagem
+      message: 'Escaneie o código QR para conectar',
+    };
   }
 
+  /**
+   * Verificar status de conexão
+   */
   @Get('status')
   async getStatus(@Request() req: any) {
-    const connected = await this.whatsAppService.isConnected(
-      req.user.workspaceId,
-    );
-    return { connected };
+    const workspaceId = req.user.workspaceId;
+    const connected = await this.whatsAppService.isConnected(workspaceId);
+
+    return {
+      connected,
+      status: connected ? 'connected' : 'disconnected',
+      timestamp: new Date(),
+    };
   }
 
+  /**
+   * Desconectar WhatsApp
+   */
+  @Post('disconnect')
+  async disconnect(@Request() req: any) {
+    const workspaceId = req.user.workspaceId;
+    await this.whatsAppService.disconnect(workspaceId);
+
+    return {
+      status: 'disconnected',
+      message: 'WhatsApp desconectado com sucesso',
+    };
+  }
+
+  /**
+   * Enviar mensagem de texto
+   */
   @Post('send-text')
   async sendText(@Body() { to, text }: any, @Request() req: any) {
+    if (!to || !text) {
+      throw new BadRequestException('to e text são obrigatórios');
+    }
+
     return this.whatsAppService.sendText(req.user.workspaceId, to, text);
   }
 
+  /**
+   * Enviar mídia
+   */
   @Post('send-media')
   @UseInterceptors(FileInterceptor('file'))
   async sendMedia(
@@ -54,6 +108,10 @@ export class WhatsAppController {
     @Body('caption') caption: string,
     @Request() req: any,
   ) {
+    if (!file || !to) {
+      throw new BadRequestException('file e to são obrigatórios');
+    }
+
     return this.whatsAppService.sendMedia(
       req.user.workspaceId,
       to,
@@ -64,11 +122,20 @@ export class WhatsAppController {
     );
   }
 
+  /**
+   * Enviar enquete/poll
+   */
   @Post('send-poll')
   async sendPoll(
     @Body() { to, question, options }: any,
     @Request() req: any,
   ) {
+    if (!to || !question || !options || options.length < 2) {
+      throw new BadRequestException(
+        'to, question e options (min 2) são obrigatórios',
+      );
+    }
+
     return this.whatsAppService.sendPoll(
       req.user.workspaceId,
       to,
@@ -77,16 +144,22 @@ export class WhatsAppController {
     );
   }
 
+  /**
+   * Listar grupos
+   */
   @Get('groups')
   async listGroups(@Request() req: any) {
     return this.whatsAppService.listGroups(req.user.workspaceId);
   }
 
+  /**
+   * Testar conexão
+   */
   @Post('test')
   async testConnection(@Request() req: any) {
     const success = await this.whatsAppService.testConnection(
       req.user.workspaceId,
     );
-    return { success };
+    return { success, status: success ? 'connected' : 'disconnected' };
   }
 }
