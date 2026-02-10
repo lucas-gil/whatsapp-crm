@@ -109,29 +109,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">🚀 Próximos Passos</h3>
-            <ul className="space-y-2 text-gray-600 text-sm">
-              <li>✅ Configure a conexão WhatsApp</li>
-              <li>✅ Crie seus primeiros leads</li>
-              <li>✅ Inicie conversas com clientes</li>
-              <li>✅ Configure automações com IA</li>
-            </ul>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">📚 Recursos Úteis</h3>
-            <ul className="space-y-2 text-gray-600 text-sm">
-              <li>💬 <a href="#" className="text-blue-600 hover:underline">Conectar WhatsApp</a></li>
-              <li>👥 <a href="#" className="text-blue-600 hover:underline">Gerenciar Leads</a></li>
-              <li>⚙️ <a href="#" className="text-blue-600 hover:underline">Configurações</a></li>
-              <li>📖 <a href="#" className="text-blue-600 hover:underline">Documentação</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
