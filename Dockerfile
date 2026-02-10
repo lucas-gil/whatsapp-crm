@@ -16,7 +16,7 @@ RUN git clone https://github.com/lucas-gil/whatsapp-crm.git .
 
 # Build backend - use install to update lock file with new dependencies
 WORKDIR /build/backend
-RUN npm install --legacy-peer-deps && npx prisma generate && npm run build
+RUN npm install --legacy-peer-deps && npx --yes prisma@5.22.0 generate && npm run build
 
 # Build frontend - use install to update lock file
 WORKDIR /build/frontend
@@ -64,7 +64,7 @@ COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/publi
 
 # Install production dependencies only (fresh install, much smaller)
 WORKDIR /app/backend
-RUN npm ci --omit=dev --legacy-peer-deps && npm install --legacy-peer-deps --no-save prisma@5.22.0 && npx prisma generate && npm remove prisma
+RUN npm ci --omit=dev --legacy-peer-deps && npm install --legacy-peer-deps --no-save prisma@5.22.0 && npx --yes prisma@5.22.0 generate && npm remove prisma
 
 WORKDIR /app/frontend
 RUN npm ci --omit=dev --legacy-peer-deps
@@ -87,7 +87,9 @@ RUN echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.c
     echo "}" >> /etc/nginx/conf.d/default.conf
 
 # Setup Supervisor config
-RUN printf "[supervisord]\nnodaemon=true\nuser=root\nlogfile=/dev/stdout\nlogfile_maxbytes=0\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautostart=true\nautorestart=false\nstartsecs=10\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=/bin/bash -c \"exec npm start\"\nenvironment=NODE_ENV=production,PORT=3001\nautostart=true\nautorestart=false\nstartsecs=15\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautostart=true\nautorestart=false\nstartsecs=5\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\npriority=999\n" > /etc/supervisor/conf.d/supervisord.conf
+RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..30}; do\n  if nc -z db 5432 2>/dev/null; then\n    echo "✅ Banco disponível"\n    break\n  fi\n  sleep 1\ndone\nsleep 2\necho "🔄 Sincronizando schema do Prisma..."\ncd /app/backend && npm install --legacy-peer-deps --no-save prisma@5.22.0 && npx --yes prisma@5.22.0 db push --accept-data-loss 2>&1 && npm remove prisma || echo "⚠️ Prisma push completed"\nsleep 2\necho "✅ Sistema pronto!"\nexec supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /entrypoint.sh && \
+chmod +x /entrypoint.sh && \
+printf '[supervisord]\nnodaemon=true\nuser=root\nlogfile=/dev/stdout\nlogfile_maxbytes=0\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautostart=true\nautorestart=false\nstartsecs=10\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=/bin/bash -c \"exec npm start\"\nenvironment=NODE_ENV=production,PORT=3001\nautostart=true\nautorestart=false\nstartsecs=15\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautostart=true\nautorestart=false\nstartsecs=5\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\npriority=999\n' > /etc/supervisor/conf.d/supervisord.conf
 
 # Create entrypoint script
 RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..30}; do\n  if nc -z db 5432 2>/dev/null; then\n    echo "✅ Banco disponível"\n    break\n  fi\n  sleep 1\ndone\nsleep 2\necho "🔄 Sincronizando schema do Prisma..."\ncd /app/backend && npx prisma db push --accept-data-loss 2>&1 || echo "⚠️ Prisma push completed"\nsleep 2\necho "✅ Sistema pronto!"\nexec supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /entrypoint.sh && \
