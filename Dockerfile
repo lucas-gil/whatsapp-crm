@@ -6,7 +6,7 @@ ARG BUILD_DATE=unknown
 ARG GIT_COMMIT=unknown
 
 # STAGE 1: Builder - Compile everything
-FROM node:20 as builder
+FROM node:20 AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 RUN npm config set fetch-timeout 300000 && npm config set fetch-retry-mintimeout 20000 && npm config set fetch-retry-maxtimeout 300000 && npm config set fetch-retries 10
 
@@ -21,6 +21,9 @@ RUN npm ci --legacy-peer-deps && npm run build
 # Build frontend with ci
 WORKDIR /build/frontend
 RUN npm ci --legacy-peer-deps && npm run build
+
+# Ensure public directory exists (even if empty)
+RUN mkdir -p /build/frontend/public
 
 # Prune dev dependencies from both
 WORKDIR /build/backend
@@ -62,7 +65,7 @@ COPY --from=builder --chown=root:root /build/backend/node_modules /app/backend/n
 COPY --from=builder --chown=root:root /build/frontend/.next /app/frontend/.next
 COPY --from=builder --chown=root:root /build/frontend/package.json /app/frontend/
 COPY --from=builder --chown=root:root /build/frontend/node_modules /app/frontend/node_modules
-COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/public 2>/dev/null || true
+COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/public
 
 # Final aggressive cleanup of unnecessary files in runtime layer
 RUN find /app -path "*/node_modules/*" -type f \( -name "*.md" -o -name "*.ts" -o -name "*.tsx" \) -delete 2>/dev/null || true && \
