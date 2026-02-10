@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { HashUtil } from '../common/utils/hash.util';
@@ -165,44 +166,70 @@ export class AuthService {
   }
 
   async generateDefaultToken() {
-    // Buscar workspace padrão
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { slug: 'default' },
-    });
+    try {
+      // Buscar workspace padrão
+      let workspace = await this.prisma.workspace.findFirst({
+        where: { slug: 'default' },
+      });
 
-    if (!workspace) {
-      this.logger.error(`❌ Workspace padrão não encontrado`);
-      throw new NotFoundException('Workspace padrão não configurado');
+      // Se não existir, criar
+      if (!workspace) {
+        this.logger.warn(`⚠️ Workspace 'default' não encontrado. Criando...`);
+        workspace = await this.prisma.workspace.create({
+          data: {
+            name: 'Default Workspace',
+            slug: 'default',
+          },
+        });
+        this.logger.info(`✅ Workspace 'default' criado com ID: ${workspace.id}`);
+      }
+
+      // Buscar chave ADMIN
+      let licenseKey = await this.prisma.licenseKey.findFirst({
+        where: {
+          workspaceId: workspace.id,
+          type: 'ADMIN_INFINITE',
+          revokedAt: null,
+        },
+      });
+
+      // Se não existir, criar
+      if (!licenseKey) {
+        this.logger.warn(`⚠️ Chave ADMIN_INFINITE não encontrada. Criando...`);
+        const randomKey = `key_${crypto.randomBytes(32).toString('hex')}`;
+        const keyHash = await HashUtil.hash(randomKey);
+        const keyPreview = randomKey.substring(0, 8) + '...' + randomKey.substring(-8);
+
+        licenseKey = await this.prisma.licenseKey.create({
+          data: {
+            workspaceId: workspace.id,
+            keyHash,
+            keyPreview,
+            type: 'ADMIN_INFINITE',
+          },
+        });
+        this.logger.info(`✅ Chave ADMIN_INFINITE criada com ID: ${licenseKey.id}`);
+        this.logger.info(`   Chave (salve em local seguro): ${randomKey}`);
+      }
+
+      // Gerar JWT padrão (válido por 24h)
+      const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
+      const jwtToken = this.jwtService.sign(
+        {
+          sub: licenseKey.id,
+          workspaceId: workspace.id,
+          licenseKeyId: licenseKey.id,
+          isAdmin: true,
+        },
+        { expiresIn: jwtExpiry },
+      );
+
+      this.logger.info(`✅ Token padrão gerado para workspace: ${workspace.id}`);
+
+      return jwtToken;
+    } catch (error) {
+      this.logger.error(`❌ Erro ao gerar token padrão:`, error);
+      throw error;
     }
-
-    // Buscar chave ADMIN
-    const licenseKey = await this.prisma.licenseKey.findFirst({
-      where: {
-        workspaceId: workspace.id,
-        type: 'ADMIN_INFINITE',
-        revokedAt: null,
-      },
-    });
-
-    if (!licenseKey) {
-      this.logger.error(`❌ Nenhuma chave ADMIN_INFINITE no workspace ${workspace.id}`);
-      throw new NotFoundException('Chave admin não configurada');
-    }
-
-    // Gerar JWT padrão (válido por 24h)
-    const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
-    const jwtToken = this.jwtService.sign(
-      {
-        sub: licenseKey.id,
-        workspaceId: workspace.id,
-        licenseKeyId: licenseKey.id,
-        isAdmin: true,
-      },
-      { expiresIn: jwtExpiry },
-    );
-
-    this.logger.info(`✅ Token padrão gerado para workspace: ${workspace.id}`);
-
-    return jwtToken;
   }
 }
