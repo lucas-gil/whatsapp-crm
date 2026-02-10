@@ -18,7 +18,7 @@ WORKDIR /build
 # Force fresh git clone by using build args (cache invalidation)
 RUN echo "Building at ${BUILD_DATE} from commit ${GIT_COMMIT}"
 # Configure npm to be more resilient to network issues
-RUN npm config set fetch-timeout 120000 && npm config set fetch-retry-mintimeout 20000 && npm config set fetch-retry-maxtimeout 120000 && npm config set fetch-retries 5
+RUN npm config set fetch-timeout 300000 && npm config set fetch-retry-mintimeout 20000 && npm config set fetch-retry-maxtimeout 300000 && npm config set fetch-retries 10 && npm config set registry https://registry.npmjs.org/
 
 RUN git clone https://github.com/lucas-gil/whatsapp-crm.git . 
 
@@ -26,9 +26,9 @@ RUN git clone https://github.com/lucas-gil/whatsapp-crm.git .
 WORKDIR /build/backend
 RUN npm install --legacy-peer-deps && npm run build
 
-# Build frontend
+# Build frontend - use simpler install without legacy-peer-deps
 WORKDIR /build/frontend
-RUN npm install --legacy-peer-deps && npm run build
+RUN npm install --no-optional && npm run build
 
 # Copy to final location - OPTIMIZED for space
 WORKDIR /
