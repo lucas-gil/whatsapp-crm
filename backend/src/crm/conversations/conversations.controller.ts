@@ -6,7 +6,6 @@ import {
   Param,
   Body,
   Query,
-  Request,
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 
@@ -17,26 +16,27 @@ export class ConversationsController {
   @Get()
   async listConversations(
     @Query('status') status: string | undefined,
-    @Request() req: any,
   ) {
+    const defaultWorkspaceId = 'default';
     return this.conversationsService.listConversations(
-      req.user.workspaceId,
+      defaultWorkspaceId,
       { status },
     );
   }
 
   @Get(':id')
-  async getConversation(@Param('id') id: string, @Request() req: any) {
-    return this.conversationsService.getConversation(req.user.workspaceId, id);
+  async getConversation(@Param('id') id: string) {
+    const defaultWorkspaceId = 'default';
+    return this.conversationsService.getConversation(defaultWorkspaceId, id);
   }
 
   @Post(':id/messages')
   async sendMessage(
     @Param('id') id: string,
     @Body() data: any,
-    @Request() req: any,
   ) {
-    return this.conversationsService.sendMessage(req.user.workspaceId, id, data);
+    const defaultWorkspaceId = 'default';
+    return this.conversationsService.sendMessage(defaultWorkspaceId, id, data);
   }
 
   @Put(':id/read')

@@ -7,7 +7,6 @@ import {
   Param,
   Body,
   Query,
-  Request,
 } from '@nestjs/common';
 import { LeadsService } from './leads.service';
 
@@ -22,9 +21,10 @@ export class LeadsController {
     @Query('optIn') optIn: string,
     @Query('page') page: string,
     @Query('limit') limit: string,
-    @Request() req: any,
   ) {
-    return this.leadsService.listLeads(req.user.workspaceId, {
+    // Use default workspace (no authentication required)
+    const defaultWorkspaceId = 'default';
+    return this.leadsService.listLeads(defaultWorkspaceId, {
       search,
       pipelineStage: stage,
       optIn: optIn === 'true',
@@ -34,27 +34,30 @@ export class LeadsController {
   }
 
   @Post()
-  async createLead(@Body() data: any, @Request() req: any) {
-    return this.leadsService.createLead(req.user.workspaceId, data);
+  async createLead(@Body() data: any) {
+    const defaultWorkspaceId = 'default';
+    return this.leadsService.createLead(defaultWorkspaceId, data);
   }
 
   @Get(':id')
-  async getLead(@Param('id') id: string, @Request() req: any) {
-    return this.leadsService.getLead(req.user.workspaceId, id);
+  async getLead(@Param('id') id: string) {
+    const defaultWorkspaceId = 'default';
+    return this.leadsService.getLead(defaultWorkspaceId, id);
   }
 
   @Put(':id')
-  async updateLead(@Param('id') id: string, @Body() data: any, @Request() req: any) {
-    return this.leadsService.updateLead(req.user.workspaceId, id, data);
+  async updateLead(@Param('id') id: string, @Body() data: any) {
+    const defaultWorkspaceId = 'default';
+    return this.leadsService.updateLead(defaultWorkspaceId, id, data);
   }
 
   @Post(':id/opt-out')
   async optOut(
     @Param('id') id: string,
     @Body('reason') reason: string,
-    @Request() req: any,
   ) {
-    return this.leadsService.optOutLead(req.user.workspaceId, id, reason);
+    const defaultWorkspaceId = 'default';
+    return this.leadsService.optOutLead(defaultWorkspaceId, id, reason);
   }
 
   @Post(':id/tags/:tagId')
