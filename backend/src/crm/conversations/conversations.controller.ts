@@ -6,37 +6,40 @@ import {
   Param,
   Body,
   Query,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
+import { JwtAuthGuard } from '../../auth/jwt.guard';
 
 @Controller('crm/conversations')
+@UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private conversationsService: ConversationsService) {}
 
   @Get()
   async listConversations(
     @Query('status') status: string | undefined,
+    @Request() req: any,
   ) {
-    const defaultWorkspaceId = 'default';
     return this.conversationsService.listConversations(
-      defaultWorkspaceId,
+      req.user.workspaceId,
       { status },
     );
   }
 
   @Get(':id')
-  async getConversation(@Param('id') id: string) {
-    const defaultWorkspaceId = 'default';
-    return this.conversationsService.getConversation(defaultWorkspaceId, id);
+  async getConversation(@Param('id') id: string, @Request() req: any) {
+    return this.conversationsService.getConversation(req.user.workspaceId, id);
   }
 
   @Post(':id/messages')
   async sendMessage(
     @Param('id') id: string,
     @Body() data: any,
+    @Request() req: any,
   ) {
-    const defaultWorkspaceId = 'default';
-    return this.conversationsService.sendMessage(defaultWorkspaceId, id, data);
+    return this.conversationsService.sendMessage(req.user.workspaceId, id, data);
   }
 
   @Put(':id/read')
