@@ -32,18 +32,13 @@ RUN npm prune --omit=dev --legacy-peer-deps
 WORKDIR /build/frontend
 RUN npm prune --omit=dev --legacy-peer-deps
 
-# Aggressive cleanup - remove all non-essential files
-RUN find /build -type f \( -name "*.map" -o -name "*.test.js" -o -name "*.spec.js" \) -delete && \
-    find /build -type d \( -name "test" -o -name "tests" -o -name ".nyc_output" -o -name "coverage" \) -exec rm -rf {} + 2>/dev/null || true && \
+# Ultra-aggressive cleanup - remove absolutely everything unnecessary
+RUN find /build -type f \( -name "*.map" -o -name "*.test.js" -o -name "*.spec.js" -o -name "*.md" \) -delete && \
+    find /build -type f \( -name "*.d.ts" -o -name "*.ts" \) -path "*/node_modules/*" -delete && \
+    find /build -type d \( -name "test" -o -name "tests" -o -name ".nyc_output" -o -name "coverage" -o -name "docs" -o -name "examples" \) -exec rm -rf {} + 2>/dev/null || true && \
+    find /build/node_modules -type d -name ".bin" -not -path "*/node_modules/.bin" -exec rm -rf {} + 2>/dev/null || true && \
     rm -rf /build/frontend/.next/cache /build/backend/.next 2>/dev/null || true && \
     npm cache clean --force
-
-# Cleanup node_modules to remove unnecessary files
-RUN find /build -path "*/node_modules/*" -type f -name "*.md" -delete && \
-    find /build -path "*/node_modules/*" -type f -name "package.json.bak" -delete && \
-    find /build -path "*/node_modules/*" -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true && \
-    find /build -path "*/node_modules/*" -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true && \
-    find /build -path "*/node_modules/*" -type d -name ".bin" -not -path "*/node_modules/.bin" -exec rm -rf {} + 2>/dev/null || true
 
 # STAGE 2: Runtime - Minimal base image
 FROM node:20-slim
@@ -59,18 +54,25 @@ RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/*.conf 2>/dev/null 
 # Copy only production artifacts from builder
 COPY --from=builder --chown=root:root /build/backend/dist /app/backend/dist
 COPY --from=builder --chown=root:root /build/backend/prisma /app/backend/prisma
-COPY --from=builder --chown=root:root /build/backend/package.json /app/backend/
-COPY --from=builder --chown=root:root /build/backend/node_modules /app/backend/node_modules
+COPY --from=builder --chown=root:root /build/backend/package.json /app/backend/package.json
+COPY --from=builder --chown=root:root /build/backend/package-lock.json /app/backend/package-lock.json 2>/dev/null || true
 
 COPY --from=builder --chown=root:root /build/frontend/.next /app/frontend/.next
-COPY --from=builder --chown=root:root /build/frontend/package.json /app/frontend/
-COPY --from=builder --chown=root:root /build/frontend/node_modules /app/frontend/node_modules
+COPY --from=builder --chown=root:root /build/frontend/package.json /app/frontend/package.json
+COPY --from=builder --chown=root:root /build/frontend/package-lock.json /app/frontend/package-lock.json 2>/dev/null || true
 COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/public
 
-# Final aggressive cleanup of unnecessary files in runtime layer
-RUN find /app -path "*/node_modules/*" -type f \( -name "*.md" -o -name "*.ts" -o -name "*.tsx" \) -delete 2>/dev/null || true && \
+# Install production dependencies only (fresh install, much smaller)
+WORKDIR /app/backend
+RUN npm ci --omit=dev --legacy-peer-deps
+
+WORKDIR /app/frontend
+RUN npm ci --omit=dev --legacy-peer-deps
+
+# Final aggressive cleanup of node_modules in runtime layer
+RUN find /app -path "*/node_modules/*" -type f \( -name "*.map" -o -name "*.md" -o -name "*.d.ts" \) -delete 2>/dev/null || true && \
     find /app/frontend/.next -type d -name "cache" -exec rm -rf {} + 2>/dev/null || true && \
-    rm -rf /app/backend/.git /app/frontend/.git 2>/dev/null || true
+    rm -rf /app/backend/.git /app/frontend/.git /app/backend/coverage 2>/dev/null || true
 
 # Setup Nginx config
 RUN echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.conf && \
