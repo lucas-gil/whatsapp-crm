@@ -26,9 +26,9 @@ RUN git clone https://github.com/lucas-gil/whatsapp-crm.git .
 WORKDIR /build/backend
 RUN npm install --legacy-peer-deps && npm run build
 
-# Build frontend - use simpler install without legacy-peer-deps
+# Build frontend - needs legacy-peer-deps for qrcode.react × React 18 conflict
 WORKDIR /build/frontend
-RUN npm install --no-optional && npm run build
+RUN npm install --legacy-peer-deps && npm run build
 
 # Copy to final location - OPTIMIZED for space
 WORKDIR /
