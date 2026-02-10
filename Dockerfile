@@ -70,7 +70,7 @@ WORKDIR /app/frontend
 RUN npm ci --omit=dev --legacy-peer-deps
 
 # Final aggressive cleanup of node_modules in runtime layer
-RUN find /app -path "*/node_modules/*" -type f \( -name "*.map" -o -name "*.md" -o -name "*.d.ts" \) -delete 2>/dev/null || true && \
+RUN find /app -path "*/node_modules/*" -type f \( -name "*.map" -o -name "*.md" -o -name "*.d.ts" \) ! -path "*/.prisma/*" -delete 2>/dev/null || true && \
     find /app/frontend/.next -type d -name "cache" -exec rm -rf {} + 2>/dev/null || true && \
     rm -rf /app/backend/.git /app/frontend/.git /app/backend/coverage 2>/dev/null || true
 
