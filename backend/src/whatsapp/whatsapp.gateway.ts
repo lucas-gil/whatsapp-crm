@@ -17,7 +17,7 @@ import { JwtService } from '@nestjs/jwt';
   namespace: '/whatsapp',
 })
 export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server;
+  @WebSocketServer() server!: Server;
   private logger = new Logger('WhatsAppGateway');
   private clientWorkspaceMap: Map<string, string> = new Map(); // socketId -> workspaceId
 
@@ -87,31 +87,31 @@ export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect
    */
   private setupEventListeners(workspaceId: string): void {
     // QR Code
-    this.whatsAppService.onEvent(workspaceId, 'qr', (payload) => {
+    this.whatsAppService.onEvent(workspaceId, 'qr', (payload: any) => {
       this.server.to(`whatsapp:${workspaceId}`).emit('qr_updated', payload);
     });
 
     // Status de conexão
-    this.whatsAppService.onEvent(workspaceId, 'connection_status', (payload) => {
+    this.whatsAppService.onEvent(workspaceId, 'connection_status', (payload: any) => {
       this.server
         .to(`whatsapp:${workspaceId}`)
         .emit('connection_status', payload);
     });
 
     // Mensagem recebida
-    this.whatsAppService.onEvent(workspaceId, 'message_received', (payload) => {
+    this.whatsAppService.onEvent(workspaceId, 'message_received', (payload: any) => {
       this.server
         .to(`whatsapp:${workspaceId}`)
         .emit('message_received', payload);
     });
 
     // Status de mensagem
-    this.whatsAppService.onEvent(workspaceId, 'message_status', (payload) => {
+    this.whatsAppService.onEvent(workspaceId, 'message_status', (payload: any) => {
       this.server.to(`whatsapp:${workspaceId}`).emit('message_status', payload);
     });
 
     // Mensagem enviada
-    this.whatsAppService.onEvent(workspaceId, 'message_sent', (payload) => {
+    this.whatsAppService.onEvent(workspaceId, 'message_sent', (payload: any) => {
       this.server.to(`whatsapp:${workspaceId}`).emit('message_sent', payload);
     });
   }

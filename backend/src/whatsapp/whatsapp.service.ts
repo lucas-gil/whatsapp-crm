@@ -22,7 +22,6 @@ export class WhatsAppService {
     const providerType = this.configService.get('WHATSAPP_PROVIDER', 'web-qr');
     this.defaultProvider =
       providerType === 'cloud-api' ? cloudAPIProvider : webQRProvider;
-    this.setupEventListeners();
   }
 
   /**
@@ -42,6 +41,10 @@ export class WhatsAppService {
 
       // Inicializar provider
       await this.defaultProvider.initSession(workspaceId);
+
+      // Registrar event handlers para este workspace
+      this.setupEventListenersForWorkspace(workspaceId);
+
       this.logger.info(`✅ WhatsApp inicializado para workspace: ${workspaceId}`);
 
       return settings;
@@ -196,7 +199,7 @@ export class WhatsAppService {
     if (!this.eventCallbacks.has(key)) {
       this.eventCallbacks.set(key, new Set());
     }
-    this.eventCallbacks.get(key).add(callback);
+    this.eventCallbacks.get(key)!.add(callback);
   }
 
   /**
@@ -210,40 +213,96 @@ export class WhatsAppService {
   // ========== PRIVATE ==========
 
   /**
-   * Configurar listeners no provider
+   * Configurar listeners no provider por workspace
    */
-  private setupEventListeners(): void {
-    // Escutar eventos do provider
-    const handleEvent = (workspaceId: string, eventType: string, payload: any) => {
-      this.logger.debug(`📡 Evento ${eventType} de ${workspaceId}:`, payload);
+  private setupEventListenersForWorkspace(workspaceId: string): void {
+    // QR Code
+    this.defaultProvider.on(
+      workspaceId,
+      'qr',
+      (payload: any) => {
+        const key = `${workspaceId}:qr`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de qr:`, error);
+          }
+        });
+      },
+    );
 
-      // Executar callbacks registrados
-      const key = `${workspaceId}:${eventType}`;
-      this.eventCallbacks.get(key)?.forEach((callback) => {
-        try {
-          callback(payload);
-        } catch (error) {
-          this.logger.error(`Erro ao executar callback de ${eventType}:`, error);
-        }
-      });
+    // Connection status
+    this.defaultProvider.on(
+      workspaceId,
+      'connection_status',
+      (payload: any) => {
+        const key = `${workspaceId}:connection_status`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de connection_status:`, error);
+          }
+        });
+        // Also handle internal status
+        this.handleConnectionStatus(workspaceId, payload);
+      },
+    );
 
-      // Manejar eventos específicos
-      this.handleEvent(workspaceId, eventType, payload);
-    };
+    // Message received
+    this.defaultProvider.on(
+      workspaceId,
+      'message_received',
+      (payload: any) => {
+        const key = `${workspaceId}:message_received`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de message_received:`, error);
+          }
+        });
+        // Also handle internal
+        this.handleMessageReceived(workspaceId, payload);
+      },
+    );
 
-    // Conectar ao provider (se suportar listeners)
-    if (this.defaultProvider instanceof WhatsAppWebQRProvider) {
-      this.defaultProvider.on('qr', (payload) => handleEvent('*', 'qr', payload));
-      this.defaultProvider.on('connection_status', (payload) =>
-        handleEvent('*', 'connection_status', payload),
-      );
-      this.defaultProvider.on('message_received', (payload) =>
-        handleEvent('*', 'message_received', payload),
-      );
-      this.defaultProvider.on('message_status', (payload) =>
-        handleEvent('*', 'message_status', payload),
-      );
-    }
+    // Message status
+    this.defaultProvider.on(
+      workspaceId,
+      'message_status',
+      (payload: any) => {
+        const key = `${workspaceId}:message_status`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de message_status:`, error);
+          }
+        });
+        // Also handle internal
+        this.handleMessageStatus(workspaceId, payload);
+      },
+    );
+
+    // Message sent
+    this.defaultProvider.on(
+      workspaceId,
+      'message_sent',
+      (payload: any) => {
+        const key = `${workspaceId}:message_sent`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de message_sent:`, error);
+          }
+        });
+        // Also handle internal
+        this.handleMessageSent(workspaceId, payload);
+      },
+    );
   }
 
   /**
@@ -332,21 +391,21 @@ export class WhatsAppService {
       // Criar/atualizar conversa
       const conversation = await this.prisma.conversation.upsert({
         where: {
-          workspaceId_participantPhone: {
+          workspaceId_leadId_groupId: {
             workspaceId,
-            participantPhone: phoneNumber,
+            leadId: lead.id,
+            groupId: null as any,
           },
         },
         update: {
           lastMessageAt: new Date(timestamp),
+          lastMessage: text || `[${type}]`,
         },
         create: {
           workspaceId,
           leadId: lead.id,
-          participantPhone: phoneNumber,
-          participantName: lead.name,
-          messageCount: 1,
           lastMessageAt: new Date(timestamp),
+          lastMessage: text || `[${type}]`,
         },
       });
 
@@ -355,13 +414,14 @@ export class WhatsAppService {
         data: {
           conversationId: conversation.id,
           workspaceId,
-          externalMessageId: messageId,
-          direction: 'inbound',
-          from: phoneNumber,
-          body: text || `[${type}]`,
-          messageType: type,
-          receivedAt: new Date(timestamp),
-          status: 'received',
+          whatsappMessageId: messageId,
+          direction: 'INCOMING',
+          text: text || `[${type}]`,
+          type,
+          senderPhoneNumber: phoneNumber,
+          senderName: lead.name,
+          status: 'SENT',
+          createdAt: new Date(timestamp),
         },
       });
 
@@ -379,13 +439,23 @@ export class WhatsAppService {
     this.logger.debug(`📌 Status de mensagem: ${messageId} → ${status}`);
 
     try {
+      // Map status codes to enum values
+      const statusMap: any = {
+        0: 'SENDING',
+        1: 'SENT',
+        2: 'DELIVERED',
+        3: 'READ',
+        4: 'FAILED',
+      };
+      const mappedStatus = statusMap[status] || 'SENT';
+
       await this.prisma.message.updateMany({
         where: {
-          externalMessageId: messageId,
+          whatsappMessageId: messageId,
           workspaceId,
         },
         data: {
-          status,
+          status: mappedStatus,
           updatedAt: new Date(),
         },
       });
@@ -404,12 +474,12 @@ export class WhatsAppService {
     try {
       await this.prisma.message.updateMany({
         where: {
-          externalMessageId: messageId,
+          whatsappMessageId: messageId,
           workspaceId,
         },
         data: {
-          status: 'sent',
-          sentAt: new Date(timestamp),
+          status: 'SENT',
+          updatedAt: new Date(timestamp),
         },
       });
     } catch (error) {
@@ -430,28 +500,39 @@ export class WhatsAppService {
     try {
       const phoneNumber = to.replace('@s.whatsapp.net', '');
 
-      // Encontrar conversa
-      const conversation = await this.prisma.conversation.findFirst({
+      // Encontrar lead/conversa
+      const lead = await this.prisma.lead.findUnique({
         where: {
-          workspaceId,
-          participantPhone: phoneNumber,
+          workspaceId_phoneNumber: {
+            workspaceId,
+            phoneNumber,
+          },
         },
       });
 
-      if (conversation) {
-        await this.prisma.message.create({
-          data: {
-            conversationId: conversation.id,
+      if (lead) {
+        const conversation = await this.prisma.conversation.findFirst({
+          where: {
             workspaceId,
-            externalMessageId: messageId,
-            direction: 'outbound',
-            to: phoneNumber,
-            body: text,
-            messageType: type,
-            status: 'sent',
-            sentAt: new Date(),
+            leadId: lead.id,
+            groupId: null,
           },
         });
+
+        if (conversation) {
+          await this.prisma.message.create({
+            data: {
+              conversationId: conversation.id,
+              workspaceId,
+              whatsappMessageId: messageId,
+              direction: 'OUTGOING',
+              text: text,
+              type: type,
+              status: 'SENT',
+              createdAt: new Date(),
+            },
+          });
+        }
       }
     } catch (error) {
       this.logger.error(`Erro ao logar mensagem:`, error);

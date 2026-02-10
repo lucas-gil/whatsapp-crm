@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../../common/utils/logger.util';
-import { WhatsAppProvider } from './interface';
+import { WhatsAppProvider } from './whatsapp.provider.interface';
 
 /**
  * Provider para WhatsApp Cloud API (Beta)
@@ -104,13 +104,15 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     return null;
   }
 
-  on(event: string, callback: (data: any) => void): void {
+  on(workspaceId: string, event: string, callback: (data: any) => void): void {
     // Cloud API usa webhooks, não eventos em tempo real
-    this.logger.debug(`[STUB] Registrando listener para evento: ${event}`);
+    this.logger.debug(
+      `[STUB] Registrando listener para evento: ${workspaceId}:${event}`,
+    );
   }
 
-  off(event: string, callback?: (data: any) => void): void {
-    this.logger.debug(`[STUB] Removendo listener do evento: ${event}`);
+  off(workspaceId: string, event: string, callback?: (data: any) => void): void {
+    this.logger.debug(`[STUB] Removendo listener do evento: ${workspaceId}:${event}`);
   }
 
   async testConnection(workspaceId: string): Promise<boolean> {

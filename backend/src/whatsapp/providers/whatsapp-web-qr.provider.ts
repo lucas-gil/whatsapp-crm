@@ -45,10 +45,12 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         auth: state,
         printQRInTerminal: false,
         logger: {
-          log: (pino) => this.logger.debug(pino),
-          error: (pino) => this.logger.error(pino),
-          warn: (pino) => this.logger.warn(pino),
-        },
+          trace: (pino: any) => this.logger.debug(JSON.stringify(pino)),
+          debug: (pino: any) => this.logger.debug(JSON.stringify(pino)),
+          info: (pino: any) => this.logger.info(JSON.stringify(pino)),
+          warn: (pino: any) => this.logger.warn(JSON.stringify(pino)),
+          error: (pino: any) => this.logger.error(JSON.stringify(pino)),
+        } as any,
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
@@ -82,7 +84,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         if (connection === 'close') {
           const shouldReconnect =
             (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
-          const reason = DisconnectReason[lastDisconnect?.error?.output?.statusCode] || 'unknown';
+          const reason =
+            DisconnectReason[(lastDisconnect?.error as any)?.output?.statusCode] ||
+            'unknown';
 
           this.logger.warn(`❌ Desconectado (${reason}): ${workspaceId}`);
           this.emitEvent(workspaceId, 'connection_status', {
@@ -118,8 +122,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       });
 
       // Handle status de entrega/leitura
-      socket.ev.on('message.update', (updates) => {
-        for (const { key, update } of updates) {
+      socket.ev.on('messages.update' as any, (updates: any[]) => {
+        updates.forEach(({ key, update }) => {
           if (update.status) {
             this.emitEvent(workspaceId, 'message_status', {
               messageId: key.id,
@@ -127,7 +131,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
               timestamp: Date.now(),
             });
           }
-        }
+        });
       });
 
       // Handle chamadas (opcional)
@@ -314,12 +318,50 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     if (!this.eventHandlers.has(key)) {
       this.eventHandlers.set(key, new Set());
     }
-    this.eventHandlers.get(key).add(handler);
+    this.eventHandlers.get(key)!.add(handler);
   }
 
-  off(workspaceId: string, event: string, handler: Function): void {
+  off(workspaceId: string, event: string, handler?: Function): void {
     const key = `${workspaceId}:${event}`;
-    this.eventHandlers.get(key)?.delete(handler);
+    if (handler) {
+      this.eventHandlers.get(key)?.delete(handler);
+    } else {
+      this.eventHandlers.delete(key);
+    }
+  }
+
+  async testConnection(workspaceId: string): Promise<boolean> {
+    const session = this.sessions.get(workspaceId);
+    return session?.user ? true : false;
+  }
+
+  async getGroupInfo(workspaceId: string, groupId: string): Promise<any> {
+    const socket = this.sessions.get(workspaceId);
+    if (!socket?.user) {
+      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+    }
+    try {
+      return await socket.groupMetadata(groupId);
+    } catch (error) {
+      this.logger.error(`Erro ao obter info do grupo ${groupId}:`, error);
+      return null;
+    }
+  }
+
+  async getProfilePicture(
+    workspaceId: string,
+    phoneNumber: string,
+  ): Promise<string | null> {
+    const socket = this.sessions.get(workspaceId);
+    if (!socket?.user) {
+      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+    }
+    try {
+      return await socket.profilePictureUrl(phoneNumber);
+    } catch (error) {
+      this.logger.error(`Erro ao obter foto do perfil ${phoneNumber}:`, error);
+      return null;
+    }
   }
 
   private emitEvent(workspaceId: string, event: string, payload: any): void {
@@ -334,94 +376,5 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         }
       });
     }
-  }
-}
-    this.logger.info(`Mídia enviada para ${to}: ${messageId}`);
-
-    return messageId;
-  }
-
-  async sendPoll(
-    workspaceId: string,
-    to: string,
-    question: string,
-    options: string[],
-  ): Promise<string> {
-    const session = this.sessions.get(workspaceId);
-    if (!session?.connected) {
-      throw new Error(
-        `Sessão não conectada para workspace ${workspaceId}`,
-      );
-    }
-
-    // WhatsApp Web via Baileys tem suporte a polls (nativo)
-    const messageId = 'msg_' + Date.now();
-    this.logger.info(
-      `Enquete enviada para ${to}: ${question}`,
-    );
-
-    return messageId;
-  }
-
-  async listGroups(workspaceId: string): Promise<any[]> {
-    const session = this.sessions.get(workspaceId);
-    if (!session?.connected) {
-      return [];
-    }
-
-    // TODO: Chamar socket.groupFetchAllParticipating()
-    return [];
-  }
-
-  async getGroupInfo(workspaceId: string, groupId: string): Promise<any> {
-    // TODO: Chamar socket.groupMetadata(groupId)
-    return null;
-  }
-
-  async getProfilePicture(
-    workspaceId: string,
-    phoneNumber: string,
-  ): Promise<string | null> {
-    // TODO: Chamar socket.profilePictureUrl(phoneNumber)
-    return null;
-  }
-
-  on(event: string, callback: (data: any) => void): void {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, new Set());
-    }
-    this.eventHandlers.get(event)!.add(callback);
-  }
-
-  off(event: string, callback?: (data: any) => void): void {
-    if (callback) {
-      this.eventHandlers.get(event)?.delete(callback);
-    } else {
-      this.eventHandlers.delete(event);
-    }
-  }
-
-  async testConnection(workspaceId: string): Promise<boolean> {
-    const session = this.sessions.get(workspaceId);
-    if (!session) {
-      return false;
-    }
-
-    // TODO: Verificar se socket está ativo
-    return session.connected;
-  }
-
-  private emitEvent(workspaceId: string, event: string, data: any): void {
-    const handlers = this.eventHandlers.get(event);
-    if (handlers) {
-      handlers.forEach((handler) => handler({ workspaceId, ...data }));
-    }
-  }
-
-  private generateMockQRCode(): string {
-    // Em produção, seria gerado pelo Baileys
-    return (
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-    );
   }
 }

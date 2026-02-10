@@ -57,8 +57,8 @@ export interface WhatsAppProvider {
   getProfilePicture(workspaceId: string, phoneNumber: string): Promise<string | null>;
 
   // Event handlers
-  on(event: string, callback: (data: WhatsAppEvent) => void): void;
-  off(event: string, callback?: (data: WhatsAppEvent) => void): void;
+  on(workspaceId: string, event: string, callback: (data: any) => void): void;
+  off(workspaceId: string, event: string, callback?: (data: any) => void): void;
 
   // Status
   testConnection(workspaceId: string): Promise<boolean>;
