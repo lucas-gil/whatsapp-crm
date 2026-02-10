@@ -1,30 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function DashboardPage() {
+  const { token, loading: authLoading, error: authError } = useAuth();
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (authLoading || !token) return; // Aguardar token estar pronto
+    
     loadData();
-  }, []);
+  }, [token, authLoading]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
       // Buscar leads
-      const leadsRes = await fetch('/api/crm/leads');
+      const leadsRes = await fetch('/api/crm/leads', { headers });
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         setLeads(leadsData);
       }
 
       // Buscar conversas
-      const convsRes = await fetch('/api/crm/conversations');
+      const convsRes = await fetch('/api/crm/conversations', { headers });
       if (convsRes.ok) {
         const convsData = await convsRes.json();
         setConversations(convsData);
@@ -37,10 +46,13 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Carregando dados...</p>
+        <div className="text-center">
+          <p className="text-gray-600 mb-2">Carregando sistema...</p>
+          {authError && <p className="text-red-600 text-sm">{authError}</p>}
+        </div>
       </div>
     );
   }

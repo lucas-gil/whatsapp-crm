@@ -42,4 +42,12 @@ export class AuthController {
     this.logger.info(`   User: ${JSON.stringify(req.user)}`);
     return req.user;
   }
+
+  @Get('default-token')
+  async getDefaultToken() {
+    this.logger.info(`📥 GET /auth/default-token recebido (público)`);
+    const token = await this.authService.generateDefaultToken();
+    this.logger.info(`✅ Token padrão gerado com sucesso`);
+    return { accessToken: token };
+  }
 }

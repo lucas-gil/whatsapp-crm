@@ -163,4 +163,46 @@ export class AuthService {
 
     this.logger.info(`Logout - Chave: ${licenseKeyId}`);
   }
+
+  async generateDefaultToken() {
+    // Buscar workspace padrão
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { slug: 'default' },
+    });
+
+    if (!workspace) {
+      this.logger.error(`❌ Workspace padrão não encontrado`);
+      throw new NotFoundException('Workspace padrão não configurado');
+    }
+
+    // Buscar chave ADMIN
+    const licenseKey = await this.prisma.licenseKey.findFirst({
+      where: {
+        workspaceId: workspace.id,
+        type: 'ADMIN_INFINITE',
+        revokedAt: null,
+      },
+    });
+
+    if (!licenseKey) {
+      this.logger.error(`❌ Nenhuma chave ADMIN_INFINITE no workspace ${workspace.id}`);
+      throw new NotFoundException('Chave admin não configurada');
+    }
+
+    // Gerar JWT padrão (válido por 24h)
+    const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
+    const jwtToken = this.jwtService.sign(
+      {
+        sub: licenseKey.id,
+        workspaceId: workspace.id,
+        licenseKeyId: licenseKey.id,
+        isAdmin: true,
+      },
+      { expiresIn: jwtExpiry },
+    );
+
+    this.logger.info(`✅ Token padrão gerado para workspace: ${workspace.id}`);
+
+    return jwtToken;
+  }
 }
