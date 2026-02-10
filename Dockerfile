@@ -37,21 +37,19 @@ RUN mkdir -p /app/backend /app/frontend /app/frontend/public && \
     cp -r /build/backend/prisma /app/backend/ && \
     cp /build/backend/package.json /app/backend/ && \
     cp /build/backend/package-lock.json /app/backend/ 2>/dev/null || true && \
-    cp -r /build/frontend/.next /app/frontend/ && \
-    cp /build/frontend/package.json /app/frontend/ && \
-    cp /build/frontend/package-lock.json /app/frontend/ 2>/dev/null || true && \
-    [ -d /build/frontend/public ] && cp -r /build/frontend/public/* /app/frontend/public/ || true && \
+    cp -r /build/frontend/.next/standalone /app/frontend/ && \
+    cp -r /build/frontend/.next/static /app/frontend/.next/ && \
+    cp -r /build/frontend/public /app/frontend/ 2>/dev/null || true && \
     rm -rf /build && \
     npm cache clean --force && \
-    find /app -type f -name "*.map" -delete && \
-    find /app -type d -name ".next/cache" -exec rm -rf {} + 2>/dev/null || true
+    find /app -type f -name "*.map" -delete
 
-# Install production dependencies only
+# Install production dependencies only - BACKEND ONLY
 WORKDIR /app/backend
 RUN npm install --omit=dev --legacy-peer-deps 2>&1 | grep -v "npm warn" || true
 
-WORKDIR /app/frontend
-RUN npm install --omit=dev --legacy-peer-deps 2>&1 | grep -v "npm warn" || true
+# Frontend uses standalone Next.js - no extra dependencies needed
+# Standalone server.js is self-contained
 
 # Setup Nginx config - simple and reliable
 RUN /bin/bash -c 'echo "upstream api { server 127.0.0.1:3000; }" > /etc/nginx/conf.d/default.conf && \
@@ -85,10 +83,11 @@ echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "[program:frontend]" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "directory=/app/frontend" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "command=/bin/bash -c \"exec node_modules/.bin/next start -p 3001\"" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "command=node standalone/server.js" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "environment=NODE_ENV=production,PORT=3001" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autostart=true" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "autorestart=false" >> /etc/supervisor/conf.d/supervisord.conf && \
-echo "startsecs=15" >> /etc/supervisor/conf.d/supervisord.conf && \
+echo "startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/supervisord.conf && \
 echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/supervisord.conf && \
