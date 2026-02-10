@@ -27,9 +27,8 @@ export function useWhatsAppWebSocket(token: string | null) {
     if (!token) return;
 
     try {
-      const socketIo = io('http://localhost', {
+      const socketIo = io('http://localhost/whatsapp', {
         path: '/socket.io',
-        namespace: '/whatsapp',
         query: {
           token,
         },
