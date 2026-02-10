@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '@prisma/prisma.module';
+import { PrismaModule } from '../../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { WhatsAppService } from './whatsapp.service';
 import { WhatsAppController } from './whatsapp.controller';

@@ -91,10 +91,6 @@ RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..
 chmod +x /entrypoint.sh && \
 printf '[supervisord]\nnodaemon=true\nuser=root\nlogfile=/dev/stdout\nlogfile_maxbytes=0\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautostart=true\nautorestart=false\nstartsecs=10\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=/bin/bash -c \"exec npm start\"\nenvironment=NODE_ENV=production,PORT=3001\nautostart=true\nautorestart=false\nstartsecs=15\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g \"daemon off;\"\nautostart=true\nautorestart=false\nstartsecs=5\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\npriority=999\n' > /etc/supervisor/conf.d/supervisord.conf
 
-# Create entrypoint script
-RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..30}; do\n  if nc -z db 5432 2>/dev/null; then\n    echo "✅ Banco disponível"\n    break\n  fi\n  sleep 1\ndone\nsleep 2\necho "🔄 Sincronizando schema do Prisma..."\ncd /app/backend && npx prisma db push --accept-data-loss 2>&1 || echo "⚠️ Prisma push completed"\nsleep 2\necho "✅ Sistema pronto!"\nexec supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
 RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
 
 WORKDIR /app
