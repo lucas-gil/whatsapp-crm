@@ -32,6 +32,9 @@ RUN npm prune --omit=dev --legacy-peer-deps
 WORKDIR /build/frontend
 RUN npm prune --omit=dev --legacy-peer-deps
 
+# Save Prisma client before aggressive cleanup
+RUN mkdir -p /build/prisma-client && cp -r /build/backend/node_modules/.prisma /build/prisma-client/.prisma 2>/dev/null || true
+
 # Ultra-aggressive cleanup - remove absolutely everything unnecessary
 RUN find /build -type f \( -name "*.map" -o -name "*.test.js" -o -name "*.spec.js" -o -name "*.md" \) -delete && \
     find /build -type f \( -name "*.d.ts" -o -name "*.ts" \) -path "*/node_modules/*" -delete && \
@@ -56,6 +59,7 @@ COPY --from=builder --chown=root:root /build/backend/dist /app/backend/dist
 COPY --from=builder --chown=root:root /build/backend/prisma /app/backend/prisma
 COPY --from=builder --chown=root:root /build/backend/package.json /app/backend/package.json
 COPY --from=builder --chown=root:root /build/backend/package-lock.json /app/backend/package-lock.json
+COPY --from=builder --chown=root:root /build/prisma-client/.prisma /app/backend/node_modules/.prisma
 
 COPY --from=builder --chown=root:root /build/frontend/.next /app/frontend/.next
 COPY --from=builder --chown=root:root /build/frontend/package.json /app/frontend/package.json
@@ -64,7 +68,7 @@ COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/publi
 
 # Install production dependencies only (fresh install, much smaller)
 WORKDIR /app/backend
-RUN npm ci --omit=dev --legacy-peer-deps && npx prisma generate
+RUN npm ci --omit=dev --legacy-peer-deps
 
 WORKDIR /app/frontend
 RUN npm ci --omit=dev --legacy-peer-deps
