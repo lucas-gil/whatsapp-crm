@@ -63,7 +63,6 @@ export class BroadcastService {
       where: { id: broadcastId },
       include: {
         recipients: {
-          orderBy: { createdAt: 'desc' },
           take: 100,
         },
       },

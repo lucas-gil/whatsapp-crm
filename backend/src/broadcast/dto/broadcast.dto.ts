@@ -11,31 +11,31 @@ export enum BroadcastStatusEnum {
 
 export class CreateBroadcastDto {
   @IsString()
-  name: string;
+  readonly name!: string;
 
   @IsString()
-  message: string;
+  readonly message!: string;
 
   @IsOptional()
   @IsString()
-  templateId?: string;
+  readonly templateId?: string;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  tagFilter?: string[];
+  readonly tagFilter?: string[];
 
   @IsOptional()
   @IsString()
-  stageFilter?: string;
+  readonly stageFilter?: string;
 
   @IsOptional()
   @IsNumber()
-  messagesPerMinute?: number;
+  readonly messagesPerMinute?: number;
 
   @IsOptional()
   @IsDateString()
-  scheduledFor?: string;
+  readonly scheduledFor?: string;
 }
 
 export class UpdateBroadcastDto {
@@ -59,7 +59,7 @@ export class UpdateBroadcastDto {
 export class AddBroadcastRecipientsDto {
   @IsArray()
   @IsString({ each: true })
-  phoneNumbers: string[];
+  readonly phoneNumbers!: string[];
 }
 
 export class BroadcastQueryDto {

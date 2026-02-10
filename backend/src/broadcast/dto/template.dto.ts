@@ -2,65 +2,65 @@ import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
 
 export class CreateTemplateDto {
   @IsString()
-  name: string;
+  readonly name!: string;
 
   @IsString()
-  category: string;
+  readonly category!: string;
 
   @IsString()
-  content: string;
+  readonly content!: string;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  variables?: string[];
+  readonly variables?: string[];
 
   @IsOptional()
   @IsString()
-  attachmentUrl?: string;
+  readonly attachmentUrl?: string;
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  readonly isActive?: boolean;
 }
 
 export class UpdateTemplateDto {
   @IsOptional()
   @IsString()
-  name?: string;
+  readonly name?: string;
 
   @IsOptional()
   @IsString()
-  category?: string;
+  readonly category?: string;
 
   @IsOptional()
   @IsString()
-  content?: string;
+  readonly content?: string;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  variables?: string[];
+  readonly variables?: string[];
 
   @IsOptional()
   @IsString()
-  attachmentUrl?: string;
+  readonly attachmentUrl?: string;
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  readonly isActive?: boolean;
 }
 
 export class TemplateQueryDto {
   @IsOptional()
   @IsString()
-  category?: string;
+  readonly category?: string;
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  readonly isActive?: boolean;
 
   @IsOptional()
   @IsString()
-  search?: string;
+  readonly search?: string;
 }

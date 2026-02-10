@@ -48,7 +48,7 @@ export class TemplateController {
    * GET /templates/categories
    * Listar todas as categorias de templates disponíveis
    */
-  @Get('categories', { name: 'getCategories' })
+  @Get('categories')
   async getCategories(@Request() req: any) {
     const workspaceId = req.user.workspaceId;
     return this.templateService.getCategories(workspaceId);
