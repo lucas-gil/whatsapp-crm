@@ -54,7 +54,6 @@ RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/*.conf 2>/dev/null 
 # Copy only production artifacts from builder
 COPY --from=builder --chown=root:root /build/backend/dist /app/backend/dist
 COPY --from=builder --chown=root:root /build/backend/prisma /app/backend/prisma
-COPY --from=builder --chown=root:root /build/backend/.prisma /app/backend/.prisma
 COPY --from=builder --chown=root:root /build/backend/package.json /app/backend/package.json
 COPY --from=builder --chown=root:root /build/backend/package-lock.json /app/backend/package-lock.json
 
@@ -65,7 +64,7 @@ COPY --from=builder --chown=root:root /build/frontend/public /app/frontend/publi
 
 # Install production dependencies only (fresh install, much smaller)
 WORKDIR /app/backend
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --omit=dev --legacy-peer-deps && npx prisma generate
 
 WORKDIR /app/frontend
 RUN npm ci --omit=dev --legacy-peer-deps
