@@ -17,6 +17,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private eventHandlers: Map<string, Set<Function>> = new Map();
   private initializingWorkspaces: Set<string> = new Set(); // Evitar múltiplas inicializações
   private sessionStoragePath: string;
+  private connectionRetries: Map<string, number> = new Map(); // Track retries
 
   constructor(private configService: ConfigService) {
     this.sessionStoragePath = path.join(process.cwd(), '.whatsapp-sessions');
@@ -83,11 +84,21 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        qrTimeout: 30000, // Timeout para geração de QR (30 segundos)
+        qrTimeout: 60000, // Aumentado para 60 segundos
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
         keepAliveIntervalMs: 30000, // Mantém conexão viva
+        retryRequestDelayMs: 100, // Retry mais agressivo
+        maxMsgsInMemory: 100,
+        defaultQueryTimeoutMs: 20000,
+        logger: {
+          trace: () => {},
+          debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
+          info: (msg: string) => this.logger.info(`[Baileys] ${msg}`),
+          warn: (msg: string) => this.logger.warn(`[Baileys] ${msg}`),
+          error: (msg: string) => this.logger.error(`[Baileys] ${msg}`),
+        } as any,
       });
 
       this.logger.info(`✅ Socket Baileys criado`);
@@ -119,6 +130,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           this.emitEvent(workspaceId, 'connection_status', { status: 'connected' });
           this.sessions.set(workspaceId, socket);
           this.qrCodes.delete(workspaceId); // Remover QR após sucesso
+          this.connectionRetries.delete(workspaceId); // Reset retry counter
         }
 
         if (connection === 'close') {
@@ -136,10 +148,17 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           });
 
           if (shouldReconnect) {
-            setTimeout(() => this.initSession(workspaceId), 3000);
+            // Backoff exponencial para reconexão
+            const retryCount = this.connectionRetries.get(workspaceId) || 0;
+            const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
+            this.logger.info(`⏳ Reconectando em ${retryDelay}ms (tentativa ${retryCount + 1})...`);
+            
+            setTimeout(() => this.initSession(workspaceId), retryDelay);
+            this.connectionRetries.set(workspaceId, Math.min(retryCount + 1, 5));
           } else {
             this.sessions.delete(workspaceId);
             this.qrCodes.delete(workspaceId);
+            this.connectionRetries.delete(workspaceId);
           }
         }
       });
@@ -166,6 +185,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       // Listener de erro
       (socket.ev as any).on('error', (error: any) => {
         this.logger.error(`🔴 Socket error: ${error?.message || JSON.stringify(error)}`);
+        this.logger.error(`🔴 Stack: ${error?.stack?.substring(0, 300)}`);
       });
 
       // Handle mensagens recebidas
@@ -307,6 +327,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     }
     this.sessions.delete(workspaceId);
     this.qrCodes.delete(workspaceId);
+    this.connectionRetries.delete(workspaceId);
     this.logger.info(`Desconectado: ${workspaceId}`);
   }
 
