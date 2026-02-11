@@ -61,6 +61,19 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       }
 
       const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
+      
+      // Se o QR code foi solicitado (por clique do usuário), deletar pasta de sessão antiga
+      // Isso força Baileys a gerar um novo QR code em vez de tentar reutilizar credenciais antigas
+      if (fs.existsSync(sessionFolder)) {
+        try {
+          this.logger.info(`🗑️  Deletando pasta de sessão antiga para gerar novo QR code`);
+          fs.rmSync(sessionFolder, { recursive: true, force: true });
+          this.logger.info(`✅ Pasta de sessão deletada`);
+        } catch (err) {
+          this.logger.warn(`⚠️  Erro ao deletar pasta de sessão: ${err.message}`);
+        }
+      }
+
       const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
       this.logger.info(`🔌 Criando socket Baileys...`);
@@ -199,22 +212,24 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}...`);
       await this.initSession(workspaceId);
       
-      // Aguardar que o QR code seja gerado (máximo 15 segundos com polling a cada 500ms)
-      this.logger.info(`⏳ Aguardando geração de QR code por até 15 segundos...`);
-      for (let i = 0; i < 30; i++) {
+      // Aguardar que o QR code seja gerado (máximo 60 segundos com polling a cada 500ms)
+      this.logger.info(`⏳ Aguardando geração de QR code por até 60 segundos...`);
+      for (let i = 0; i < 120; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
         const generatedQr = this.qrCodes.get(workspaceId);
         if (generatedQr) {
-          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId} (tentativa ${i + 1}/30)`);
+          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId} após ${(i + 1) * 500}ms`);
           return generatedQr;
         }
-        if (i % 6 === 0) { // Log a cada 3 segundos
-          this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms)`);
+        if (i % 20 === 0 && i > 0) { // Log a cada 10 segundos
+          this.logger.info(`⏳ Ainda aguardando QR code... (${(i + 1) * 500}ms / 60000ms)`);
+        }
+        if (i === 119) {
+          this.logger.error(`❌ QR Code não foi gerado após 60 segundos para ${workspaceId}`);
+          this.logger.error(`❌ Possível causa: evento connection.update com qr não foi disparado pelo Baileys`);
+          this.logger.error(`❌ Verifique se a versão do @whiskeysockets/baileys está correta`);
         }
       }
-      
-      this.logger.error(`❌ QR Code não foi gerado após 15 segundos para ${workspaceId}`);
-      this.logger.error(`❌ O evento connection.update com qr pode não ter sido disparado pelo Baileys`);
     } else {
       this.logger.debug(`📱 Sessão já existe para ${workspaceId}`);
     }
