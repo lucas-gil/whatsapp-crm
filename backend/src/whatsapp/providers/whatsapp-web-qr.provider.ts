@@ -45,6 +45,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         DisconnectReason,
         proto,
         WAMessageStubType,
+        fetchLatestBaileysVersion,
       } = await import('@whiskeysockets/baileys');
       const QRCode = await import('qrcode');
 
@@ -82,11 +83,21 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`🔌 Criando socket Baileys...`);
 
       // Criar socket do Baileys com configurações otimizadas para QR generation
+      let waVersion: [number, number, number] | undefined;
+      try {
+        const latest = await fetchLatestBaileysVersion();
+        waVersion = latest.version;
+        this.logger.info(`📦 Baileys WA version: ${waVersion.join('.')}`);
+      } catch (err) {
+        this.logger.warn(`⚠️  Falha ao obter versão do WhatsApp Web, usando padrão`);
+      }
+
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
         qrTimeout: 180000, // 180 segundos (3 minutos) para geração de QR - AUMENTADO
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
+        version: waVersion,
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
         keepAliveIntervalMs: 30000,
