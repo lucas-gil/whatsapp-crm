@@ -49,6 +49,17 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`✅ Módulos importados com sucesso`);
       this.logger.info(`💾 Inicializando pasta de sessão para workspace: ${workspaceId}`);
 
+      // Limpar socket anterior se existir
+      const existingSession = this.sessions.get(workspaceId);
+      if (existingSession) {
+        try {
+          existingSession.logout();
+        } catch (e) {
+          this.logger.warn(`⚠️  Erro ao fazer logout da sessão anterior`);
+        }
+        this.sessions.delete(workspaceId);
+      }
+
       const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
       const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
 
@@ -120,7 +131,10 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       });
 
       // Handle credenciais alteradas
-      socket.ev.on('creds.update', saveCreds);
+      socket.ev.on('creds.update', async () => {
+        this.logger.info(`💾 Credenciais atualizadas para ${workspaceId}`);
+        await saveCreds();
+      });
 
       // Handle mensagens recebidas
       socket.ev.on('messages.upsert', async (m) => {
@@ -157,6 +171,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       this.sessions.set(workspaceId, socket);
       this.logger.info(`✅ Sessão inicializada com sucesso para ${workspaceId}`);
+      this.logger.info(`📲 Socket está pronto para receber eventos de QR code`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = (error instanceof Error ? error.stack : '') || '';
