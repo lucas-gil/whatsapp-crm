@@ -149,7 +149,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`✅ Sessão inicializada com sucesso para ${workspaceId}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : '';
+      const errorStack = (error instanceof Error ? error.stack : '') || '';
       this.logger.error(`❌ Erro ao inicializar sessão ${workspaceId}:`);
       this.logger.error(`   Tipo: ${error?.constructor?.name}`);
       this.logger.error(`   Mensagem: ${errorMessage}`);
