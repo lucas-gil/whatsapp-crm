@@ -256,6 +256,20 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           this.logger.error(`❌ QR Code não foi gerado após 60 segundos para ${workspaceId}`);
           this.logger.error(`❌ Possível causa: evento connection.update com qr não foi disparado pelo Baileys`);
           this.logger.error(`❌ Verifique se a versão do @whiskeysockets/baileys está correta`);
+          
+          // Limpar a sessão para próxima tentativa
+          this.sessions.delete(workspaceId);
+          this.qrCodes.delete(workspaceId);
+          
+          // Aguardar mais 10 segundos no caso de QR atrasado
+          for (let j = 0; j < 20; j++) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            const delayedQr = this.qrCodes.get(workspaceId);
+            if (delayedQr) {
+              this.logger.info(`✅ QR Code gerado com ATRASO para ${workspaceId} após ${60000 + (j + 1) * 500}ms`);
+              return delayedQr;
+            }
+          }
         }
       }
     } else {
