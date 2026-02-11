@@ -46,16 +46,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`🔌 Criando socket Baileys...`);
 
       // Criar socket do Baileys
+      // Não passar logger customizado - Baileys usará seu próprio logger (Pino)
+      // Se passar logger customizado, precisa implementar logger.child() que Baileys chama internamente
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        logger: {
-          trace: (pino: any) => this.logger.debug(JSON.stringify(pino)),
-          debug: (pino: any) => this.logger.debug(JSON.stringify(pino)),
-          info: (pino: any) => this.logger.info(JSON.stringify(pino)),
-          warn: (pino: any) => this.logger.warn(JSON.stringify(pino)),
-          error: (pino: any) => this.logger.error(JSON.stringify(pino)),
-        } as any,
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
