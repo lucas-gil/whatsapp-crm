@@ -18,6 +18,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private initializingWorkspaces: Set<string> = new Set(); // Evitar múltiplas inicializações
   private sessionStoragePath: string;
   private connectionRetries: Map<string, number> = new Map(); // Track retries
+  private connectionStatus: Map<string, string> = new Map(); // Track connection status per workspace
 
   constructor(private configService: ConfigService) {
     this.sessionStoragePath = path.join(process.cwd(), '.whatsapp-sessions');
@@ -111,6 +112,10 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
+
+        if (connection) {
+          this.connectionStatus.set(workspaceId, connection);
+        }
         
         // Log detalhado para debug
         this.logger.info(`📡 connection.update event: connection=${connection}, qr=${qr ? '✅ presente' : '❌ ausente'}`);
@@ -152,6 +157,12 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             'unknown';
 
           this.logger.warn(`❌ Desconectado (${reason}): ${workspaceId}`);
+          if (lastDisconnect?.error) {
+            const lastError: any = lastDisconnect.error;
+            this.logger.warn(
+              `❌ Detalhes do disconnect: ${lastError?.message || 'sem mensagem'} | status=${lastError?.output?.statusCode || 'n/a'}`,
+            );
+          }
           this.emitEvent(workspaceId, 'connection_status', {
             status: 'disconnected',
             reason,
@@ -274,9 +285,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
     // Verificar se sessão já existe e aguardar QR
     const session = this.sessions.get(workspaceId);
-    if (session) {
+    const status = this.connectionStatus.get(workspaceId);
+    if (session && status !== 'close' && status !== 'disconnected') {
       this.logger.info(`📱 Sessão já existe para ${workspaceId}, aguardando QR code por até 5 minutos...`);
       // Aguardar até 300 segundos (5 minutos) por um QR code existente
+      let sessionDisconnected = false;
       for (let i = 0; i < 600; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
         const existingQr = this.qrCodes.get(workspaceId);
@@ -284,12 +297,26 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           this.logger.info(`✅ QR Code obtido após ${(i + 1) * 500}ms`);
           return existingQr;
         }
+        const currentStatus = this.connectionStatus.get(workspaceId);
+        if (currentStatus === 'close' || currentStatus === 'disconnected') {
+          this.logger.warn(`⚠️ Sessão desconectou antes do QR, iniciando nova tentativa...`);
+          sessionDisconnected = true;
+          break;
+        }
         if (i % 60 === 0 && i > 0) {
           this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms / 300000ms)`);
         }
       }
-      this.logger.warn(`⏳ Sessão existe mas QR não foi emitido em 5 minutos, tentando inicializar nova...`);
-      return null;
+      if (!sessionDisconnected) {
+        this.logger.warn(`⏳ Sessão existe mas QR não foi emitido em 5 minutos, tentando inicializar nova...`);
+        return null;
+      }
+    }
+
+    if (session && (status === 'close' || status === 'disconnected')) {
+      this.sessions.delete(workspaceId);
+      this.qrCodes.delete(workspaceId);
+      this.connectionStatus.delete(workspaceId);
     }
 
     // Tentar até 5 vezes para obter QR (foi 3, aumentado para 5)
@@ -336,6 +363,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       }
       this.sessions.delete(workspaceId);
       this.qrCodes.delete(workspaceId);
+      this.connectionStatus.delete(workspaceId);
       
       if (attempt < 5) {
         const delay = 5000 * attempt; // 5s, 10s, 15s, 20s, 25s
@@ -377,6 +405,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     this.sessions.delete(workspaceId);
     this.qrCodes.delete(workspaceId);
     this.connectionRetries.delete(workspaceId);
+    this.connectionStatus.delete(workspaceId);
     this.logger.info(`Desconectado: ${workspaceId}`);
   }
 
