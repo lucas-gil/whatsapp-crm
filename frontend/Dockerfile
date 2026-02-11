@@ -20,6 +20,9 @@ RUN npm run build
 # Verificar se build foi bem-sucedido
 RUN test -d .next || (echo "Build failed: .next directory not found" && exit 1)
 
+# Garantir que /public exista para o stage final
+RUN mkdir -p /app/frontend/public
+
 FROM node:20-alpine
 
 WORKDIR /app/frontend
