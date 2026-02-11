@@ -29,6 +29,8 @@ export class WhatsAppService {
    */
   async initializeWorkspace(workspaceId: string) {
     try {
+      this.logger.info(`🔄 Inicializando WhatsApp para workspace: ${workspaceId}`);
+
       const settings = await this.prisma.whatsAppSettings.upsert({
         where: { workspaceId },
         update: { isConnected: false },
@@ -39,18 +41,27 @@ export class WhatsAppService {
         },
       });
 
+      this.logger.info(`💾 Configurações salvas no banco`);
+
       // Inicializar provider
+      this.logger.info(`📱 Iniciando sessão Baileys...`);
       await this.defaultProvider.initSession(workspaceId);
+
+      this.logger.info(`✅ Sessão Baileys inicializada`);
 
       // Registrar event handlers para este workspace
       this.setupEventListenersForWorkspace(workspaceId);
 
-      this.logger.info(`✅ WhatsApp inicializado para workspace: ${workspaceId}`);
+      this.logger.info(`✅ WhatsApp inicializado com sucesso para workspace: ${workspaceId}`);
 
       return settings;
     } catch (error) {
-      this.logger.error(`Erro ao inicializar WhatsApp ${workspaceId}:`, error);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
+      this.logger.error(`❌ Erro ao inicializar WhatsApp ${workspaceId}:`);
+      this.logger.error(`   Mensagem: ${errorMessage}`);
+      this.logger.error(`   Stack: ${errorStack}`);
+      throw new Error(`Falha na inicialização: ${errorMessage}`);
     }
   }
 

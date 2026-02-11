@@ -24,13 +24,23 @@ export class WhatsAppController {
    */
   @Post('connect-qr')
   async connectQR(@Request() req: any) {
-    const workspaceId = req.user.workspaceId;
-    const settings = await this.whatsAppService.initializeWorkspace(workspaceId);
-    return {
-      status: 'initializing',
-      message: 'Escaneie o código QR com seu WhatsApp',
-      settings,
-    };
+    try {
+      const workspaceId = req.user.workspaceId;
+      if (!workspaceId) {
+        throw new BadRequestException('Workspace ID não encontrado');
+      }
+
+      const settings = await this.whatsAppService.initializeWorkspace(workspaceId);
+      return {
+        status: 'initializing',
+        message: 'Escaneie o código QR com seu WhatsApp',
+        settings,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao inicializar WhatsApp';
+      console.error('❌ Erro em connectQR:', error);
+      throw new BadRequestException(`Erro ao conectar: ${message}`);
+    }
   }
 
   /**

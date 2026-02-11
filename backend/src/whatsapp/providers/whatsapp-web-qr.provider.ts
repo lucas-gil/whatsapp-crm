@@ -26,6 +26,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
   async initSession(workspaceId: string): Promise<void> {
     try {
+      this.logger.info(`📱 Importando Baileys e QRCode...`);
+      
       const {
         default: makeWASocket,
         useMultiFileAuthState,
@@ -35,10 +37,13 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       } = await import('@whiskeysockets/baileys');
       const QRCode = await import('qrcode');
 
-      this.logger.info(`Inicializando sessão Web QR para workspace: ${workspaceId}`);
+      this.logger.info(`✅ Módulos importados com sucesso`);
+      this.logger.info(`💾 Inicializando pasta de sessão para workspace: ${workspaceId}`);
 
       const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
       const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
+
+      this.logger.info(`🔌 Criando socket Baileys...`);
 
       // Criar socket do Baileys
       const socket = makeWASocket({
@@ -55,6 +60,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
       });
+
+      this.logger.info(`✅ Socket Baileys criado`);
 
       // Handle QR Code
       socket.ev.on('connection.update', async (update) => {
@@ -139,8 +146,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       });
 
       this.sessions.set(workspaceId, socket);
+      this.logger.info(`✅ Sessão inicializada com sucesso para ${workspaceId}`);
     } catch (error) {
-      this.logger.error(`Erro ao inicializar sessão ${workspaceId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
+      this.logger.error(`❌ Erro ao inicializar sessão ${workspaceId}:`);
+      this.logger.error(`   Tipo: ${error?.constructor?.name}`);
+      this.logger.error(`   Mensagem: ${errorMessage}`);
+      this.logger.error(`   Stack: ${errorStack.substring(0, 500)}`);
       throw error;
     }
   }
