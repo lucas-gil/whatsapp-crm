@@ -36,6 +36,7 @@
     "@nestjs/jwt": "^11.0.1",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.2.10",
+    "@nestjs/platform-socket.io": "^10.2.10",
     "@nestjs/websockets": "^10.2.10",
     "@prisma/client": "^5.7.0",
     "@whiskeysockets/baileys": "^6.6.18",
