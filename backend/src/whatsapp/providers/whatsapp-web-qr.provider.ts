@@ -70,7 +70,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           fs.rmSync(sessionFolder, { recursive: true, force: true });
           this.logger.info(`✅ Pasta de sessão deletada`);
         } catch (err) {
-          this.logger.warn(`⚠️  Erro ao deletar pasta de sessão: ${err.message}`);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(`⚠️  Erro ao deletar pasta de sessão: ${errMsg}`);
         }
       }
 
@@ -204,8 +205,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       socket.ev.on('connection.update', (update) => {
         // Nota: este é um listener adicional apenas para debug
         Object.keys(update).forEach(key => {
-          if (update[key] !== null && update[key] !== undefined) {
-            this.logger.debug(`📶 connection.update propriedade: ${key} = ${typeof update[key]}`);
+          const val = (update as any)[key];
+          if (val !== null && val !== undefined) {
+            this.logger.debug(`📶 connection.update propriedade: ${key} = ${typeof val}`);
           }
         });
       });
