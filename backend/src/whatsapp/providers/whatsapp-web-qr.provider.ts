@@ -78,15 +78,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       this.logger.info(`🔌 Criando socket Baileys...`);
 
-      // Criar socket do Baileys
-      // Não passar logger customizado - Baileys usará seu próprio logger (Pino)
-      // Se passar logger customizado, precisa implementar logger.child() que Baileys chama internamente
+      // Criar socket do Baileys com configurações otimizadas para QR generation
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
+        qrTimeout: 30000, // Timeout para geração de QR (30 segundos)
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
+        keepAliveIntervalMs: 30000, // Mantém conexão viva
       });
 
       this.logger.info(`✅ Socket Baileys criado`);
@@ -149,6 +149,24 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         await saveCreds();
       });
 
+      // Tentar escutar evento de QR direto (em caso de API diferente)
+      try {
+        (socket.ev as any).on('qr', async (qr: string) => {
+          this.logger.info(`🔐 Evento 'qr' disparado diretamente`);
+          const qrDataUrl = await QRCode.toDataURL(qr);
+          this.qrCodes.set(workspaceId, qrDataUrl);
+          this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
+          this.logger.info(`✅ QR Code gerado do evento direto para ${workspaceId}`);
+        });
+      } catch (err) {
+        // Silenciar se não funcionar
+      }
+
+      // Listener de erro
+      (socket.ev as any).on('error', (error: any) => {
+        this.logger.error(`🔴 Socket error: ${error?.message || JSON.stringify(error)}`);
+      });
+
       // Handle mensagens recebidas
       socket.ev.on('messages.upsert', async (m) => {
         const message = m.messages[0];
@@ -180,6 +198,16 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       socket.ev.on('call', async (callData) => {
         this.logger.info(`Chamada recebida: ${JSON.stringify(callData)}`);
         this.emitEvent(workspaceId, 'call', callData);
+      });
+
+      // Debug: Log de todos os eventos para entender qual está disparando
+      socket.ev.on('connection.update', (update) => {
+        // Nota: este é um listener adicional apenas para debug
+        Object.keys(update).forEach(key => {
+          if (update[key] !== null && update[key] !== undefined) {
+            this.logger.debug(`📶 connection.update propriedade: ${key} = ${typeof update[key]}`);
+          }
+        });
       });
 
       this.sessions.set(workspaceId, socket);
