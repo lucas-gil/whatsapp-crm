@@ -97,6 +97,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           info: (msg: string) => this.logger.info(`[Baileys] ${msg}`),
           warn: (msg: string) => this.logger.warn(`[Baileys] ${msg}`),
           error: (msg: string) => this.logger.error(`[Baileys] ${msg}`),
+          child: () =>
+            ({
+              trace: () => {},
+              debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
+              info: (msg: string) => this.logger.info(`[Baileys] ${msg}`),
+              warn: (msg: string) => this.logger.warn(`[Baileys] ${msg}`),
+              error: (msg: string) => this.logger.error(`[Baileys] ${msg}`),
+              child: () => this.logger as any,
+            } as any),
         } as any,
       });
 
