@@ -61,12 +61,18 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       // Handle QR Code
       socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
+        
+        // Log detalhado para debug
+        this.logger.info(`📡 connection.update event: connection=${connection}, qr=${qr ? '✅ presente' : '❌ ausente'}`);
+        if (qr) {
+          this.logger.info(`🔐 QR code value received (length: ${qr.length})`);
+        }
 
         if (qr) {
           const qrDataUrl = await QRCode.toDataURL(qr);
           this.qrCodes.set(workspaceId, qrDataUrl);
           this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
-          this.logger.info(`QR Code gerado para ${workspaceId}`);
+          this.logger.info(`✅ QR Code gerado para ${workspaceId}`);
         }
 
         if (connection === 'connecting') {
@@ -167,17 +173,22 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}...`);
       await this.initSession(workspaceId);
       
-      // Aguardar que o QR code seja gerado (máximo 5 segundos)
-      for (let i = 0; i < 10; i++) {
+      // Aguardar que o QR code seja gerado (máximo 15 segundos com polling a cada 500ms)
+      this.logger.info(`⏳ Aguardando geração de QR code por até 15 segundos...`);
+      for (let i = 0; i < 30; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
         const generatedQr = this.qrCodes.get(workspaceId);
         if (generatedQr) {
-          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId}`);
+          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId} (tentativa ${i + 1}/30)`);
           return generatedQr;
         }
-        await new Promise(resolve => setTimeout(resolve, 500));
+        if (i % 6 === 0) { // Log a cada 3 segundos
+          this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms)`);
+        }
       }
       
-      this.logger.warn(`⚠️ QR Code não foi gerado após 5 segundos para ${workspaceId}`);
+      this.logger.error(`❌ QR Code não foi gerado após 15 segundos para ${workspaceId}`);
+      this.logger.error(`❌ O evento connection.update com qr pode não ter sido disparado pelo Baileys`);
     } else {
       this.logger.debug(`📱 Sessão já existe para ${workspaceId}`);
     }
