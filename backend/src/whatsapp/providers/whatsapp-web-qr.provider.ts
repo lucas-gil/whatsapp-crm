@@ -15,6 +15,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private sessions: Map<string, any> = new Map();
   private qrCodes: Map<string, string> = new Map();
   private eventHandlers: Map<string, Set<Function>> = new Map();
+  private initializingWorkspaces: Set<string> = new Set(); // Evitar múltiplas inicializações
   private sessionStoragePath: string;
 
   constructor(private configService: ConfigService) {
@@ -25,6 +26,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   async initSession(workspaceId: string): Promise<void> {
+    // Evitar múltiplas inicializações simultâneas
+    if (this.initializingWorkspaces.has(workspaceId)) {
+      this.logger.warn(`⚠️  Inicialização já em progresso para ${workspaceId}, ignorando requisição duplicada`);
+      return;
+    }
+    
+    this.initializingWorkspaces.add(workspaceId);
+    
     try {
       this.logger.info(`📱 Importando Baileys e QRCode...`);
       
@@ -156,6 +165,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.error(`   Mensagem: ${errorMessage}`);
       this.logger.error(`   Stack: ${errorStack.substring(0, 500)}`);
       throw error;
+    } finally {
+      this.initializingWorkspaces.delete(workspaceId);
     }
   }
 
