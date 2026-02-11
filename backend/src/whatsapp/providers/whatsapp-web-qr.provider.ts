@@ -84,11 +84,12 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        qrTimeout: 90000, // 90 segundos para geração de QR
+        qrTimeout: 180000, // 180 segundos (3 minutos) para geração de QR - AUMENTADO
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
         keepAliveIntervalMs: 30000,
+        connectTimeoutMs: 180000, // Aumentar timeout de conexão para 3 minutos
         logger: {
           trace: () => {},
           debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
@@ -104,9 +105,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       let qrEmitted = false;
       const qrTimeout = setTimeout(() => {
         if (!qrEmitted) {
-          this.logger.warn(`⏳ QR timeout de 90s atingido, ainda não emitido`);
+          this.logger.warn(`⏳ QR timeout de 180s atingido, ainda não emitido - pode haver problema de rede/WhatsApp`);
         }
-      }, 90000);
+      }, 180000);
 
       socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -163,13 +164,13 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             this.logger.info(`⏳ Aguardando QR code antes de reconectar (${reason})`);
             clearTimeout(qrTimeout);
           } else if (shouldReconnect) {
-            // Backoff exponencial para reconexão
+            // Backoff exponencial para reconexão (AUMENTADO)
             const retryCount = this.connectionRetries.get(workspaceId) || 0;
-            const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
-            this.logger.info(`⏳ Reconectando em ${retryDelay}ms (tentativa ${retryCount + 1})...`);
+            const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 60000); // Max 60s (era 30s)
+            this.logger.info(`⏳ Reconectando em ${retryDelay}ms (tentativa ${retryCount + 1}/10)...`);
             
             setTimeout(() => this.initSession(workspaceId), retryDelay);
-            this.connectionRetries.set(workspaceId, Math.min(retryCount + 1, 5));
+            this.connectionRetries.set(workspaceId, Math.min(retryCount + 1, 10)); // 10 tentativas (era 5)
           } else {
             this.sessions.delete(workspaceId);
             this.qrCodes.delete(workspaceId);
@@ -274,33 +275,33 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     // Verificar se sessão já existe e aguardar QR
     const session = this.sessions.get(workspaceId);
     if (session) {
-      this.logger.info(`📱 Sessão já existe para ${workspaceId}, aguardando QR code...`);
-      // Aguardar até 90 segundos por um QR code existente
-      for (let i = 0; i < 180; i++) {
+      this.logger.info(`📱 Sessão já existe para ${workspaceId}, aguardando QR code por até 5 minutos...`);
+      // Aguardar até 300 segundos (5 minutos) por um QR code existente
+      for (let i = 0; i < 600; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
         const existingQr = this.qrCodes.get(workspaceId);
         if (existingQr) {
           this.logger.info(`✅ QR Code obtido após ${(i + 1) * 500}ms`);
           return existingQr;
         }
-        if (i % 20 === 0 && i > 0) {
-          this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms / 90000ms)`);
+        if (i % 60 === 0 && i > 0) {
+          this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms / 300000ms)`);
         }
       }
-      this.logger.warn(`⏳ Sessão existe mas QR não foi emitido em 90s, tentando inicializar nova...`);
+      this.logger.warn(`⏳ Sessão existe mas QR não foi emitido em 5 minutos, tentando inicializar nova...`);
       return null;
     }
 
-    // Tentar até 3 vezes para obter QR
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}... (tentativa ${attempt}/3)`);
+    // Tentar até 5 vezes para obter QR (foi 3, aumentado para 5)
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}... (tentativa ${attempt}/5)`);
       
       try {
         await this.initSession(workspaceId);
       } catch (error) {
         this.logger.error(`❌ Erro ao inicializar sessão (tentativa ${attempt}):`, error);
-        if (attempt < 3) {
-          const delay = 2000 * attempt; // 2s, 4s, 6s
+        if (attempt < 5) {
+          const delay = 3000 * attempt; // 3s, 6s, 9s, 12s, 15s
           this.logger.info(`⏳ Aguardando ${delay}ms antes de tentar novamente...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
@@ -308,21 +309,21 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         return null;
       }
       
-      // Aguardar geração de QR (máximo 120 segundos com polling a cada 500ms)
-      this.logger.info(`⏳ Aguardando geração de QR code por até 120 segundos...`);
-      for (let i = 0; i < 240; i++) {
+      // Aguardar geração de QR (máximo 300 segundos = 5 minutos com polling a cada 500ms)
+      this.logger.info(`⏳ Aguardando geração de QR code por até 5 minutos (300 segundos)...`);
+      for (let i = 0; i < 600; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
         const generatedQr = this.qrCodes.get(workspaceId);
         if (generatedQr) {
           this.logger.info(`✅ QR Code gerado com sucesso após ${(i + 1) * 500}ms (tentativa ${attempt})`);
           return generatedQr;
         }
-        if (i % 20 === 0 && i > 0) { // Log a cada 10 segundos
-          this.logger.info(`⏳ Ainda aguardando QR code... (${(i + 1) * 500}ms / 120000ms)`);
+        if (i % 60 === 0 && i > 0) { // Log a cada 30 segundos
+          this.logger.info(`⏳ Ainda aguardando QR code... (${(i + 1) * 500}ms / 300000ms - tentativa ${attempt}/5)`);
         }
       }
 
-      this.logger.warn(`⏳ QR Code não foi gerado após 120s (tentativa ${attempt}/3)`);
+      this.logger.warn(`⏳ QR Code não foi gerado após 5 minutos (tentativa ${attempt}/5)`);
       
       // Limpar a sessão para próxima tentativa
       const session = this.sessions.get(workspaceId);
@@ -336,18 +337,20 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.sessions.delete(workspaceId);
       this.qrCodes.delete(workspaceId);
       
-      if (attempt < 3) {
-        const delay = 3000 * attempt; // 3s, 6s, 9s
+      if (attempt < 5) {
+        const delay = 5000 * attempt; // 5s, 10s, 15s, 20s, 25s
         this.logger.info(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
-    this.logger.error(`❌ Falha ao gerar QR code após 3 tentativas para ${workspaceId}`);
-    this.logger.error(`❌ Verifique:
-      1. Conectividade de rede
-      2. Versão do @whiskeysockets/baileys (atual: verifique package.json)
-      3. Logs do Baileys para mais detalhes`);
+    this.logger.error(`❌ Falha ao gerar QR code após 5 tentativas (25 minutos totais) para ${workspaceId}`);
+    this.logger.error(`❌ Possíveis problemas:
+      1. 🌐 Conectividade de rede (check internet connection)
+      2. 🚫 WhatsApp está bloqueando sua region/IP (try VPN)
+      3. 📄 Versão do @whiskeysockets/baileys pode estar incompatível
+      4. ⏱️ Timeout insuficiente (está em 300s, pode precisar mais)
+      5. 🔍 Verificar logs do Baileys acima`);
     
     return null;
   }
