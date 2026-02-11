@@ -84,14 +84,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        qrTimeout: 60000, // Aumentado para 60 segundos
+        qrTimeout: 90000, // 90 segundos para geração de QR
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         syncFullHistory: false,
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
-        keepAliveIntervalMs: 30000, // Mantém conexão viva
-        retryRequestDelayMs: 100, // Retry mais agressivo
-        maxMsgsInMemory: 100,
-        defaultQueryTimeoutMs: 20000,
+        keepAliveIntervalMs: 30000,
         logger: {
           trace: () => {},
           debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
@@ -103,7 +100,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       this.logger.info(`✅ Socket Baileys criado`);
 
-      // Handle QR Code
+      // Handle QR Code - Listener principal com timeout
+      let qrEmitted = false;
+      const qrTimeout = setTimeout(() => {
+        if (!qrEmitted) {
+          this.logger.warn(`⏳ QR timeout de 90s atingido, ainda não emitido`);
+        }
+      }, 90000);
+
       socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -111,13 +115,19 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         this.logger.info(`📡 connection.update event: connection=${connection}, qr=${qr ? '✅ presente' : '❌ ausente'}`);
         if (qr) {
           this.logger.info(`🔐 QR code value received (length: ${qr.length})`);
+          qrEmitted = true;
+          clearTimeout(qrTimeout);
         }
 
         if (qr) {
-          const qrDataUrl = await QRCode.toDataURL(qr);
-          this.qrCodes.set(workspaceId, qrDataUrl);
-          this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
-          this.logger.info(`✅ QR Code gerado para ${workspaceId}`);
+          try {
+            const qrDataUrl = await QRCode.toDataURL(qr);
+            this.qrCodes.set(workspaceId, qrDataUrl);
+            this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
+            this.logger.info(`✅ QR Code gerado e armazenado para ${workspaceId}`);
+          } catch (error) {
+            this.logger.error(`❌ Erro ao gerar QR Data URL:`, error);
+          }
         }
 
         if (connection === 'connecting') {
@@ -147,7 +157,12 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             shouldReconnect,
           });
 
-          if (shouldReconnect) {
+          // NÃO reconectar automaticamente se ainda estamos esperando QR
+          // Deixar que o getQRCode() trate a reconexão
+          if (!qrEmitted && shouldReconnect) {
+            this.logger.info(`⏳ Aguardando QR code antes de reconectar (${reason})`);
+            clearTimeout(qrTimeout);
+          } else if (shouldReconnect) {
             // Backoff exponencial para reconexão
             const retryCount = this.connectionRetries.get(workspaceId) || 0;
             const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
@@ -256,54 +271,85 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       return qr;
     }
 
-    // Verificar se sessão já existe
+    // Verificar se sessão já existe e aguardar QR
     const session = this.sessions.get(workspaceId);
-    if (!session) {
-      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}...`);
-      await this.initSession(workspaceId);
+    if (session) {
+      this.logger.info(`📱 Sessão já existe para ${workspaceId}, aguardando QR code...`);
+      // Aguardar até 90 segundos por um QR code existente
+      for (let i = 0; i < 180; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const existingQr = this.qrCodes.get(workspaceId);
+        if (existingQr) {
+          this.logger.info(`✅ QR Code obtido após ${(i + 1) * 500}ms`);
+          return existingQr;
+        }
+        if (i % 20 === 0 && i > 0) {
+          this.logger.info(`⏳ Aguardando QR code... (${(i + 1) * 500}ms / 90000ms)`);
+        }
+      }
+      this.logger.warn(`⏳ Sessão existe mas QR não foi emitido em 90s, tentando inicializar nova...`);
+      return null;
+    }
+
+    // Tentar até 3 vezes para obter QR
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}... (tentativa ${attempt}/3)`);
       
-      // Aguardar que o QR code seja gerado (máximo 60 segundos com polling a cada 500ms)
-      this.logger.info(`⏳ Aguardando geração de QR code por até 60 segundos...`);
-      for (let i = 0; i < 120; i++) {
+      try {
+        await this.initSession(workspaceId);
+      } catch (error) {
+        this.logger.error(`❌ Erro ao inicializar sessão (tentativa ${attempt}):`, error);
+        if (attempt < 3) {
+          const delay = 2000 * attempt; // 2s, 4s, 6s
+          this.logger.info(`⏳ Aguardando ${delay}ms antes de tentar novamente...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        return null;
+      }
+      
+      // Aguardar geração de QR (máximo 120 segundos com polling a cada 500ms)
+      this.logger.info(`⏳ Aguardando geração de QR code por até 120 segundos...`);
+      for (let i = 0; i < 240; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
         const generatedQr = this.qrCodes.get(workspaceId);
         if (generatedQr) {
-          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId} após ${(i + 1) * 500}ms`);
+          this.logger.info(`✅ QR Code gerado com sucesso após ${(i + 1) * 500}ms (tentativa ${attempt})`);
           return generatedQr;
         }
         if (i % 20 === 0 && i > 0) { // Log a cada 10 segundos
-          this.logger.info(`⏳ Ainda aguardando QR code... (${(i + 1) * 500}ms / 60000ms)`);
-        }
-        if (i === 119) {
-          this.logger.error(`❌ QR Code não foi gerado após 60 segundos para ${workspaceId}`);
-          this.logger.error(`❌ Possível causa: evento connection.update com qr não foi disparado pelo Baileys`);
-          this.logger.error(`❌ Verifique se a versão do @whiskeysockets/baileys está correta`);
-          
-          // Limpar a sessão para próxima tentativa
-          this.sessions.delete(workspaceId);
-          this.qrCodes.delete(workspaceId);
-          
-          // Aguardar mais 10 segundos no caso de QR atrasado
-          for (let j = 0; j < 20; j++) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const delayedQr = this.qrCodes.get(workspaceId);
-            if (delayedQr) {
-              this.logger.info(`✅ QR Code gerado com ATRASO para ${workspaceId} após ${60000 + (j + 1) * 500}ms`);
-              return delayedQr;
-            }
-          }
+          this.logger.info(`⏳ Ainda aguardando QR code... (${(i + 1) * 500}ms / 120000ms)`);
         }
       }
-    } else {
-      this.logger.debug(`📱 Sessão já existe para ${workspaceId}`);
+
+      this.logger.warn(`⏳ QR Code não foi gerado após 120s (tentativa ${attempt}/3)`);
+      
+      // Limpar a sessão para próxima tentativa
+      const session = this.sessions.get(workspaceId);
+      if (session) {
+        try {
+          await session.logout();
+        } catch (e) {
+          // Ignorar erros de logout
+        }
+      }
+      this.sessions.delete(workspaceId);
+      this.qrCodes.delete(workspaceId);
+      
+      if (attempt < 3) {
+        const delay = 3000 * attempt; // 3s, 6s, 9s
+        this.logger.info(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
 
-    const finalQr = this.qrCodes.get(workspaceId);
-    if (!finalQr) {
-      this.logger.warn(`⚠️ Nenhum QR Code disponível para ${workspaceId}`);
-    }
+    this.logger.error(`❌ Falha ao gerar QR code após 3 tentativas para ${workspaceId}`);
+    this.logger.error(`❌ Verifique:
+      1. Conectividade de rede
+      2. Versão do @whiskeysockets/baileys (atual: verifique package.json)
+      3. Logs do Baileys para mais detalhes`);
     
-    return finalQr || null;
+    return null;
   }
 
   async isConnected(workspaceId: string): Promise<boolean> {
