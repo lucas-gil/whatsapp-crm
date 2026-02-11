@@ -17,9 +17,12 @@ export function useWhatsAppConnection(token: string | null) {
   });
   const [loading, setLoading] = useState(false);
 
-  const api = typeof window !== 'undefined' 
-    ? `${window.location.origin}/api`
-    : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
 
   /**
    * Iniciar conexão QR

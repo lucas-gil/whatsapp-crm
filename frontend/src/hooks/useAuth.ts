@@ -18,7 +18,11 @@ export function useAuth() {
         }
 
         // Se não tem token, buscar um token padrão
-        const response = await fetch('/api/auth/default-token');
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+        const api = apiBase
+          ? apiBase.replace(/\/$/, '')
+          : '/api';
+        const response = await fetch(`${api}/auth/default-token`);
         
         if (!response.ok) {
           throw new Error('Falha ao obter token padrão');
