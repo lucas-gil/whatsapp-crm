@@ -58,7 +58,15 @@ export class WhatsAppService {
    * Obter QR Code para conectar
    */
   async getQRCode(workspaceId: string): Promise<string | null> {
+    this.logger.info(`🔍 Obtendo QR Code para ${workspaceId}`);
     const qr = await this.defaultProvider.getQRCode(workspaceId);
+    
+    if (!qr) {
+      this.logger.warn(`⚠️ QR Code não disponível para ${workspaceId}`);
+    } else {
+      this.logger.info(`✅ QR Code obtido para ${workspaceId}`);
+    }
+    
     return qr;
   }
 

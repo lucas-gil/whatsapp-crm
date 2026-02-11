@@ -75,8 +75,6 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         if (connection === 'open') {
           this.logger.info(`✅ Conectado com sucesso: ${workspaceId}`);
           this.emitEvent(workspaceId, 'connection_status', { status: 'connected' });
-          const session = this.sessions.get(workspaceId) || {};
-          session.connected = true;
           this.sessions.set(workspaceId, socket);
           this.qrCodes.delete(workspaceId); // Remover QR após sucesso
         }
@@ -149,15 +147,39 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
   async getQRCode(workspaceId: string): Promise<string | null> {
     const qr = this.qrCodes.get(workspaceId);
-    if (!qr) {
-      // Verificar se já está conectado
-      const session = this.sessions.get(workspaceId);
-      if (!session) {
-        await this.initSession(workspaceId);
-      }
-      return this.qrCodes.get(workspaceId) || null;
+    
+    if (qr) {
+      this.logger.debug(`✅ QR Code found for workspace: ${workspaceId}`);
+      return qr;
     }
-    return qr;
+
+    // Verificar se sessão já existe
+    const session = this.sessions.get(workspaceId);
+    if (!session) {
+      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}...`);
+      await this.initSession(workspaceId);
+      
+      // Aguardar que o QR code seja gerado (máximo 5 segundos)
+      for (let i = 0; i < 10; i++) {
+        const generatedQr = this.qrCodes.get(workspaceId);
+        if (generatedQr) {
+          this.logger.info(`✅ QR Code gerado com sucesso para ${workspaceId}`);
+          return generatedQr;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      this.logger.warn(`⚠️ QR Code não foi gerado após 5 segundos para ${workspaceId}`);
+    } else {
+      this.logger.debug(`📱 Sessão já existe para ${workspaceId}`);
+    }
+
+    const finalQr = this.qrCodes.get(workspaceId);
+    if (!finalQr) {
+      this.logger.warn(`⚠️ Nenhum QR Code disponível para ${workspaceId}`);
+    }
+    
+    return finalQr || null;
   }
 
   async isConnected(workspaceId: string): Promise<boolean> {
