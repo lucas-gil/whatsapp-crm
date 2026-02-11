@@ -180,6 +180,6 @@ export class TemplateService {
       select: { category: true },
     });
 
-    return categories.map(c => c.category);
+    return categories.map((c: { category: string | null }) => c.category);
   }
 }

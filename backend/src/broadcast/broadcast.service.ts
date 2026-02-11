@@ -178,7 +178,7 @@ export class BroadcastService {
 
     // Criar recipients para cada grupo
     const recipients = await Promise.all(
-      groups.map(group =>
+      groups.map((group: { id: string }) =>
         this.prisma.broadcastRecipient.create({
           data: {
             broadcastId,
@@ -327,11 +327,11 @@ export class BroadcastService {
         completedAt: broadcast.completedAt,
       },
       recipients: {
-        pending: recipientStats.find(s => s.status === 'PENDING')?._count || 0,
-        sent: recipientStats.find(s => s.status === 'SENT')?._count || 0,
-        failed: recipientStats.find(s => s.status === 'FAILED')?._count || 0,
-        optedOut: recipientStats.find(s => s.status === 'OPTED_OUT')?._count || 0,
-        invalidNumber: recipientStats.find(s => s.status === 'INVALID_NUMBER')?._count || 0,
+        pending: recipientStats.find((s: { status: string; _count?: number }) => s.status === 'PENDING')?._count || 0,
+        sent: recipientStats.find((s: { status: string; _count?: number }) => s.status === 'SENT')?._count || 0,
+        failed: recipientStats.find((s: { status: string; _count?: number }) => s.status === 'FAILED')?._count || 0,
+        optedOut: recipientStats.find((s: { status: string; _count?: number }) => s.status === 'OPTED_OUT')?._count || 0,
+        invalidNumber: recipientStats.find((s: { status: string; _count?: number }) => s.status === 'INVALID_NUMBER')?._count || 0,
       },
     };
 
