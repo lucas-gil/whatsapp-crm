@@ -107,6 +107,11 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     return null;
   }
 
+  async listContacts(workspaceId: string): Promise<any[]> {
+    this.logger.info(`[STUB] Listando contatos para workspace: ${workspaceId}`);
+    return [];
+  }
+
   on(workspaceId: string, event: string, callback: (data: any) => void): void {
     // Cloud API usa webhooks, não eventos em tempo real
     this.logger.debug(

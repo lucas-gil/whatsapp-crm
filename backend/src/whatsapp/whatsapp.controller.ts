@@ -163,6 +163,14 @@ export class WhatsAppController {
   }
 
   /**
+   * Listar contatos do WhatsApp
+   */
+  @Get('contacts')
+  async listContacts(@Request() req: any) {
+    return this.whatsAppService.listContacts(req.user.workspaceId);
+  }
+
+  /**
    * Testar conexão
    */
   @Post('test')

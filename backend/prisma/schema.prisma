@@ -384,6 +384,8 @@ model Broadcast {
   
   // Agendamento
   scheduledFor    DateTime?
+  scheduleConfig  Json?
+  scheduleTimezone String?
   startedAt       DateTime?
   completedAt     DateTime?
   

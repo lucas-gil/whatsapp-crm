@@ -58,6 +58,7 @@ export interface WhatsAppProvider {
 
   // Contacts
   getProfilePicture(workspaceId: string, phoneNumber: string): Promise<string | null>;
+  listContacts(workspaceId: string): Promise<any[]>;
 
   // Event handlers
   on(workspaceId: string, event: string, callback: (data: any) => void): void;

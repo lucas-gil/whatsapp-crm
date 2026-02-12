@@ -20,6 +20,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private sessionStoragePath: string;
   private connectionRetries: Map<string, number> = new Map(); // Track retries
   private connectionStatus: Map<string, string> = new Map(); // Track connection status per workspace
+  private contacts: Map<string, any[]> = new Map();
 
   constructor(private configService: ConfigService) {
     this.sessionStoragePath = path.join(process.cwd(), '.whatsapp-sessions');
@@ -201,6 +202,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             this.connectionRetries.delete(workspaceId);
           }
         }
+      });
+
+      socket.ev.on('contacts.set', (payload: any) => {
+        const contactList = Array.isArray(payload?.contacts) ? payload.contacts : [];
+        this.setContacts(workspaceId, contactList);
+      });
+
+      socket.ev.on('contacts.upsert', (contacts: any[]) => {
+        this.upsertContacts(workspaceId, contacts || []);
       });
 
       // Handle credenciais alteradas
@@ -419,6 +429,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     this.qrCodes.delete(workspaceId);
     this.connectionRetries.delete(workspaceId);
     this.connectionStatus.delete(workspaceId);
+    this.contacts.delete(workspaceId);
     this.logger.info(`Desconectado: ${workspaceId}`);
   }
 
@@ -533,6 +544,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     }
   }
 
+  async listContacts(workspaceId: string): Promise<any[]> {
+    const contacts = this.contacts.get(workspaceId) || [];
+    return contacts;
+  }
+
   // ========== HELPERS ==========
   private getMimeTypePrefix(mimeType: string): string {
     if (mimeType.startsWith('image/')) return 'image';
@@ -614,5 +630,38 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         }
       });
     }
+  }
+
+  private setContacts(workspaceId: string, contacts: any[]): void {
+    const normalized = this.normalizeContacts(contacts);
+    this.contacts.set(workspaceId, normalized);
+  }
+
+  private upsertContacts(workspaceId: string, contacts: any[]): void {
+    const existing = this.contacts.get(workspaceId) || [];
+    const byId = new Map(existing.map((c: any) => [c.id, c]));
+
+    this.normalizeContacts(contacts).forEach((contact) => {
+      byId.set(contact.id, { ...byId.get(contact.id), ...contact });
+    });
+
+    this.contacts.set(workspaceId, Array.from(byId.values()));
+  }
+
+  private normalizeContacts(contacts: any[]): any[] {
+    return contacts
+      .filter((contact) => contact?.id && String(contact.id).includes('@s.whatsapp.net'))
+      .map((contact) => {
+        const id = String(contact.id);
+        const phoneNumber = id.split('@')[0];
+        const name =
+          contact.name || contact.notify || contact.verifiedName || phoneNumber;
+
+        return {
+          id,
+          phoneNumber,
+          name,
+        };
+      });
   }
 }

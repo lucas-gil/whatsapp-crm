@@ -10,6 +10,7 @@ export class BroadcastService {
    * Criar novo broadcast (disparador em massa)
    */
   async createBroadcast(workspaceId: string, dto: CreateBroadcastDto) {
+    const scheduledFor = dto.scheduledFor ? new Date(dto.scheduledFor) : null;
     const broadcast = await this.prisma.broadcast.create({
       data: {
         workspaceId,
@@ -19,8 +20,10 @@ export class BroadcastService {
         tagFilter: dto.tagFilter || [],
         stageFilter: dto.stageFilter,
         messagesPerMinute: dto.messagesPerMinute || 20,
-        scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
-        status: 'DRAFT',
+        scheduledFor,
+        scheduleConfig: dto.scheduleConfig || undefined,
+        scheduleTimezone: dto.scheduleTimezone,
+        status: scheduledFor ? 'SCHEDULED' : 'DRAFT',
       },
     });
 
@@ -91,13 +94,17 @@ export class BroadcastService {
       throw new BadRequestException('Apenas broadcasts em DRAFT podem ser atualizados');
     }
 
+    const scheduledFor = dto.scheduledFor ? new Date(dto.scheduledFor) : undefined;
+
     return this.prisma.broadcast.update({
       where: { id: broadcastId },
       data: {
         name: dto.name,
         message: dto.message,
         messagesPerMinute: dto.messagesPerMinute,
-        scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : undefined,
+        scheduledFor,
+        scheduleConfig: dto.scheduleConfig,
+        scheduleTimezone: dto.scheduleTimezone,
       },
     });
   }

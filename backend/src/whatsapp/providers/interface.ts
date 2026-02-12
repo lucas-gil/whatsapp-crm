@@ -72,6 +72,11 @@ export interface WhatsAppProvider {
   ): Promise<string | null>;
 
   /**
+   * Listar contatos do WhatsApp conectado
+   */
+  listContacts(workspaceId: string): Promise<any[]>;
+
+  /**
    * Registrar listeners de eventos
    */
   on(event: string, callback: (data: any) => void): void;

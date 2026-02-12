@@ -204,6 +204,18 @@ export class WhatsAppService {
   }
 
   /**
+   * Listar contatos do WhatsApp conectado
+   */
+  async listContacts(workspaceId: string) {
+    const isConnected = await this.isConnected(workspaceId);
+    if (!isConnected) {
+      throw new Error('WhatsApp não está conectado');
+    }
+
+    return this.defaultProvider.listContacts(workspaceId);
+  }
+
+  /**
    * Testar conexão (mock - sempre true se conectado)
    */
   async testConnection(workspaceId: string): Promise<boolean> {

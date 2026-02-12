@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsNumber, IsDateString, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNumber, IsDateString, IsEnum, IsObject } from 'class-validator';
 
 export enum BroadcastStatusEnum {
   DRAFT = 'DRAFT',
@@ -36,6 +36,14 @@ export class CreateBroadcastDto {
   @IsOptional()
   @IsDateString()
   readonly scheduledFor?: string;
+
+  @IsOptional()
+  @IsObject()
+  readonly scheduleConfig?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  readonly scheduleTimezone?: string;
 }
 
 export class UpdateBroadcastDto {
@@ -54,6 +62,14 @@ export class UpdateBroadcastDto {
   @IsOptional()
   @IsDateString()
   scheduledFor?: string;
+
+  @IsOptional()
+  @IsObject()
+  scheduleConfig?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  scheduleTimezone?: string;
 }
 
 export class AddBroadcastRecipientsDto {
