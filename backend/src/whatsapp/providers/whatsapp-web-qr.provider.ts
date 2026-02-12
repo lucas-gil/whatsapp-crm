@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import pino from 'pino';
 import { Logger } from '../../common/utils/logger.util';
 import { WhatsAppProvider, WhatsAppEvent } from './whatsapp.provider.interface';
 
@@ -27,7 +28,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     }
   }
 
-  async initSession(workspaceId: string): Promise<void> {
+  async initSession(
+    workspaceId: string,
+    options: { forceNewSession?: boolean } = {},
+  ): Promise<void> {
+    const forceNewSession = options.forceNewSession === true;
     // Evitar múltiplas inicializações simultâneas
     if (this.initializingWorkspaces.has(workspaceId)) {
       this.logger.warn(`⚠️  Inicialização já em progresso para ${workspaceId}, ignorando requisição duplicada`);
@@ -56,7 +61,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const existingSession = this.sessions.get(workspaceId);
       if (existingSession) {
         try {
-          existingSession.logout();
+          await Promise.resolve(existingSession.logout());
         } catch (e) {
           this.logger.warn(`⚠️  Erro ao fazer logout da sessão anterior`);
         }
@@ -65,9 +70,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
       
-      // Se o QR code foi solicitado (por clique do usuário), deletar pasta de sessão antiga
-      // Isso força Baileys a gerar um novo QR code em vez de tentar reutilizar credenciais antigas
-      if (fs.existsSync(sessionFolder)) {
+      // Somente apagar sessão quando o usuário solicitar um QR novo
+      if (forceNewSession && fs.existsSync(sessionFolder)) {
         try {
           this.logger.info(`🗑️  Deletando pasta de sessão antiga para gerar novo QR code`);
           fs.rmSync(sessionFolder, { recursive: true, force: true });
@@ -92,6 +96,10 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         this.logger.warn(`⚠️  Falha ao obter versão do WhatsApp Web, usando padrão`);
       }
 
+      const baileysLogger = pino({
+        level: process.env.BAILEYS_LOG_LEVEL || 'silent',
+      });
+
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
@@ -102,22 +110,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
         keepAliveIntervalMs: 30000,
         connectTimeoutMs: 180000, // Aumentar timeout de conexão para 3 minutos
-        logger: {
-          trace: () => {},
-          debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
-          info: (msg: string) => this.logger.info(`[Baileys] ${msg}`),
-          warn: (msg: string) => this.logger.warn(`[Baileys] ${msg}`),
-          error: (msg: string) => this.logger.error(`[Baileys] ${msg}`),
-          child: () =>
-            ({
-              trace: () => {},
-              debug: (msg: string) => this.logger.debug(`[Baileys] ${msg}`),
-              info: (msg: string) => this.logger.info(`[Baileys] ${msg}`),
-              warn: (msg: string) => this.logger.warn(`[Baileys] ${msg}`),
-              error: (msg: string) => this.logger.error(`[Baileys] ${msg}`),
-              child: () => this.logger as any,
-            } as any),
-        } as any,
+        logger: baileysLogger,
       });
 
       this.logger.info(`✅ Socket Baileys criado`);

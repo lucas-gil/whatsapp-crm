@@ -45,7 +45,7 @@ export class WhatsAppService {
 
       // Inicializar provider
       this.logger.info(`📱 Iniciando sessão Baileys...`);
-      await this.defaultProvider.initSession(workspaceId);
+      await this.defaultProvider.initSession(workspaceId, { forceNewSession: true });
 
       this.logger.info(`✅ Sessão Baileys inicializada`);
 

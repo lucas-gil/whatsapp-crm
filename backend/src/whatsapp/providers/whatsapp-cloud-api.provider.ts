@@ -14,7 +14,10 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
 
   constructor(private configService: ConfigService) {}
 
-  async initSession(workspaceId: string): Promise<void> {
+  async initSession(
+    workspaceId: string,
+    _options?: { forceNewSession?: boolean },
+  ): Promise<void> {
     this.logger.info(
       `[STUB] Inicializando sessão Cloud API para workspace: ${workspaceId}`,
     );

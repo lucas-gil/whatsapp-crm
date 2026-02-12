@@ -6,7 +6,10 @@ export interface WhatsAppProvider {
   /**
    * Inicializar sessão para um workspace
    */
-  initSession(workspaceId: string): Promise<void>;
+  initSession(
+    workspaceId: string,
+    options?: { forceNewSession?: boolean },
+  ): Promise<void>;
 
   /**
    * Obter QR Code para scanning (null se não aplicável)

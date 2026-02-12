@@ -27,7 +27,10 @@ export interface WhatsAppEvent {
 
 export interface WhatsAppProvider {
   // Ciclo de vida
-  initSession(workspaceId: string): Promise<void>;
+  initSession(
+    workspaceId: string,
+    options?: { forceNewSession?: boolean },
+  ): Promise<void>;
   getQRCode(workspaceId: string): Promise<string | null>;
   isConnected(workspaceId: string): Promise<boolean>;
   disconnect(workspaceId: string): Promise<void>;
