@@ -78,6 +78,7 @@ export default function EnquetesPage() {
   const [autoStart, setAutoStart] = useState(true);
   const [sendNow, setSendNow] = useState(false);
   const [includeMenuReturn, setIncludeMenuReturn] = useState(true);
+  const [includeCancelOption, setIncludeCancelOption] = useState(true);
   const [pollsEnabled, setPollsEnabled] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -310,10 +311,16 @@ export default function EnquetesPage() {
             : [...cleanedFollowOptions, 'Voltar ao menu principal']
           : cleanedFollowOptions;
 
-        if (questionValue && withMenuReturn.length >= 2) {
+        const withCancelOption = includeCancelOption
+          ? withMenuReturn.includes('Cancelar')
+            ? withMenuReturn
+            : [...withMenuReturn, 'Cancelar']
+          : withMenuReturn;
+
+        if (questionValue && withCancelOption.length >= 2) {
           acc[key] = {
             question: questionValue,
-            options: withMenuReturn,
+            options: withCancelOption,
             introTitle: value.introTitle?.trim() || undefined,
             introInfo: value.introInfo?.trim() || undefined,
             introMessage: value.introMessage?.trim() || undefined,
@@ -787,6 +794,15 @@ export default function EnquetesPage() {
                   onChange={(event) => setIncludeMenuReturn(event.target.checked)}
                 />
                 Adicionar opcao "Voltar ao menu principal" nos submenus
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={includeCancelOption}
+                  onChange={(event) => setIncludeCancelOption(event.target.checked)}
+                />
+                Adicionar opcao "Cancelar" nos submenus
               </label>
 
               <label className="flex items-center gap-2 text-sm">

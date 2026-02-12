@@ -785,6 +785,7 @@ export class WhatsAppService {
     }
 
     const isMenuReturn = this.isMenuReturnOption(selectedOption);
+    const isCancelOption = this.isCancelOption(selectedOption);
 
     await this.prisma.pollInteraction.create({
       data: {
@@ -828,6 +829,10 @@ export class WhatsAppService {
         },
       });
 
+      return;
+    }
+
+    if (isCancelOption) {
       return;
     }
 
@@ -885,6 +890,11 @@ export class WhatsAppService {
   private isMenuReturnOption(option: string): boolean {
     const normalized = option.toLowerCase();
     return normalized.includes('menu') || normalized.includes('inicio');
+  }
+
+  private isCancelOption(option: string): boolean {
+    const normalized = option.toLowerCase();
+    return normalized.includes('cancelar') || normalized.includes('anular');
   }
 
   private buildIntroText(source: {
