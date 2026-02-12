@@ -201,9 +201,41 @@ export class WhatsAppService {
     campaign: any,
     targetJid: string,
     phoneNumber?: string,
-    sendOptions?: { includeIntro?: boolean },
+    sendOptions?: { includeIntro?: boolean; sectionIndex?: number },
   ): Promise<string> {
     await this.ensurePollsEnabled(workspaceId);
+    const sections = Array.isArray(campaign.sections) ? campaign.sections : null;
+    const sectionIndex = sendOptions?.sectionIndex ?? 0;
+
+    if (sections?.length) {
+      const section = sections[sectionIndex];
+      if (!section?.options?.length) {
+        throw new Error('Enquete sem opcoes');
+      }
+
+      if (sendOptions?.includeIntro !== false) {
+        await this.sendIntroContent(workspaceId, targetJid, {
+          introTitle: section.title,
+          introInfo: section.info,
+          introMessage: section.message,
+          introFilePath: section.introFilePath,
+          introFileName: section.introFileName,
+          introFileMime: section.introFileMime,
+        });
+      }
+
+      const labels = section.options.map((option: any) => option.label);
+      const pollResponse = campaign.useNative
+        ? await this.sendPoll(workspaceId, targetJid, section.question, labels)
+        : await this.sendText(
+            workspaceId,
+            targetJid,
+            this.buildPollFallback(section.question, labels),
+          );
+
+      return pollResponse.messageId;
+    }
+
     const pollOptions = Array.isArray(campaign.options) ? campaign.options : [];
 
     if (!pollOptions.length) {
@@ -221,14 +253,6 @@ export class WhatsAppService {
           targetJid,
           this.buildPollFallback(campaign.question, pollOptions),
         );
-
-    if (campaign.useNative) {
-      await this.sendText(
-        workspaceId,
-        targetJid,
-        this.buildPollFallback(campaign.question, pollOptions),
-      );
-    }
 
     return pollResponse.messageId;
   }
@@ -769,23 +793,49 @@ export class WhatsAppService {
 
     if (!recipient) return;
 
-    const options = Array.isArray(recipient.campaign.options)
-      ? (recipient.campaign.options as string[])
-      : [];
+    const sections = Array.isArray(recipient.campaign.sections)
+      ? (recipient.campaign.sections as any[])
+      : null;
     const selectedIndex = optionIndex - 1;
 
-    if (selectedIndex < 0 || selectedIndex >= options.length) {
-      return;
+    let selectedOptionLabel = '';
+    let nextSectionIndex: number | null | undefined = undefined;
+
+    if (sections?.length) {
+      const currentSection = sections[recipient.flowStep ?? 0];
+      const sectionOptions = currentSection?.options || [];
+
+      if (selectedIndex < 0 || selectedIndex >= sectionOptions.length) {
+        return;
+      }
+
+      const selectedOption = sectionOptions[selectedIndex];
+      if (!selectedOption) {
+        return;
+      }
+
+      selectedOptionLabel = selectedOption.label || '';
+      nextSectionIndex = selectedOption.nextSection;
+    } else {
+      const options = Array.isArray(recipient.campaign.options)
+        ? (recipient.campaign.options as string[])
+        : [];
+
+      if (selectedIndex < 0 || selectedIndex >= options.length) {
+        return;
+      }
+
+      const selectedOption = options[selectedIndex];
+
+      if (!selectedOption) {
+        return;
+      }
+
+      selectedOptionLabel = selectedOption;
     }
 
-    const selectedOption = options[selectedIndex];
-
-    if (!selectedOption) {
-      return;
-    }
-
-    const isMenuReturn = this.isMenuReturnOption(selectedOption);
-    const isCancelOption = this.isCancelOption(selectedOption);
+    const isMenuReturn = this.isMenuReturnOption(selectedOptionLabel);
+    const isCancelOption = this.isCancelOption(selectedOptionLabel);
 
     await this.prisma.pollInteraction.create({
       data: {
@@ -793,7 +843,7 @@ export class WhatsAppService {
         recipientId: recipient.id,
         fromJid: fromJid || `${phoneNumber}@s.whatsapp.net`,
         selectedIndex,
-        selectedOption,
+        selectedOption: selectedOptionLabel,
         rawText: text,
         flowStep: recipient.flowStep,
       },
@@ -813,7 +863,7 @@ export class WhatsAppService {
         recipient.campaign,
         fromJid || `${phoneNumber}@s.whatsapp.net`,
         phoneNumber,
-        { includeIntro: false },
+        { includeIntro: false, sectionIndex: 0 },
       );
 
       await this.prisma.pollRecipient.create({
@@ -833,6 +883,40 @@ export class WhatsAppService {
     }
 
     if (isCancelOption) {
+      return;
+    }
+
+    if (sections?.length) {
+      if (typeof nextSectionIndex !== 'number') {
+        return;
+      }
+
+      const nextSection = sections[nextSectionIndex];
+      if (!nextSection?.options?.length) {
+        return;
+      }
+
+      const messageId = await this.sendPollCampaignMessage(
+        workspaceId,
+        recipient.campaign,
+        `${phoneNumber}@s.whatsapp.net`,
+        phoneNumber,
+        { sectionIndex: nextSectionIndex },
+      );
+
+      await this.prisma.pollRecipient.create({
+        data: {
+          campaignId: recipient.campaignId,
+          targetJid: `${phoneNumber}@s.whatsapp.net`,
+          phoneNumber,
+          targetType: 'contact',
+          pollMessageId: messageId,
+          status: 'SENT',
+          flowStep: nextSectionIndex,
+          parentRecipientId: recipient.id,
+        },
+      });
+
       return;
     }
 
@@ -863,14 +947,6 @@ export class WhatsAppService {
           );
 
       const messageId = response.messageId;
-
-      if (recipient.campaign.useNative) {
-        await this.sendText(
-          workspaceId,
-          phoneNumber,
-          this.buildPollFallback(followUp.question, followUp.options),
-        );
-      }
 
       await this.prisma.pollRecipient.create({
         data: {

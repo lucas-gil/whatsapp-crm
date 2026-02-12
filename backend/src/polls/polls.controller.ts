@@ -78,6 +78,31 @@ export class PollsController {
     );
   }
 
+  @Post(':id/section-file/:index')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadSectionFile(
+    @Request() req: any,
+    @Param('id') pollId: string,
+    @Param('index') index: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo nao enviado');
+    }
+
+    const sectionIndex = Number.parseInt(index, 10);
+    if (!Number.isFinite(sectionIndex)) {
+      throw new BadRequestException('Indice de secao invalido');
+    }
+
+    return this.pollsService.attachSectionFile(
+      req.user.workspaceId,
+      pollId,
+      sectionIndex,
+      file,
+    );
+  }
+
   @Get(':id/interactions')
   async getInteractions(@Request() req: any, @Param('id') pollId: string) {
     return this.pollsService.getInteractions(req.user.workspaceId, pollId);

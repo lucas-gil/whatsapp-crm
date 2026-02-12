@@ -20,65 +20,93 @@ type Interaction = {
   selectedOption?: string | null;
   rawText?: string | null;
   createdAt: string;
+  phoneNumber?: string | null;
+  sectionTitle?: string | null;
 };
 
-type FollowUpConfig = {
+type SectionOption = {
+  label: string;
+  nextSection: number | null;
+};
+
+type Section = {
+  title: string;
+  info: string;
+  message: string;
   question: string;
-  options: string[];
-  introTitle?: string;
-  introInfo?: string;
-  introMessage?: string;
+  options: SectionOption[];
 };
 
-const defaultMenuOptions = [
-  'Pagamento',
-  'Entrega',
-  'Suporte',
-  'Promocoes',
-  'Informacoes',
+const defaultSections: Section[] = [
+  {
+    title: 'Apresentacao',
+    info: 'Escolha uma opcao para continuar.',
+    message: 'Atendimento automatico 24h.',
+    question: 'Como podemos ajudar?',
+    options: [
+      { label: 'Precos e planos', nextSection: 1 },
+      { label: 'Pagamento', nextSection: 2 },
+      { label: 'Suporte', nextSection: 3 },
+      { label: 'Entrega', nextSection: 4 },
+      { label: 'Falar com atendente', nextSection: null },
+    ],
+  },
+  {
+    title: 'Precos e planos',
+    info: 'Veja opcoes de planos e promocoes.',
+    message: '',
+    question: 'Qual assunto sobre precos?',
+    options: [
+      { label: 'Ver planos', nextSection: null },
+      { label: 'Falar com vendedor', nextSection: null },
+      { label: 'Voltar ao inicio', nextSection: 0 },
+    ],
+  },
+  {
+    title: 'Pagamento',
+    info: 'Resolva pagamentos rapidamente.',
+    message: '',
+    question: 'Como podemos ajudar no pagamento?',
+    options: [
+      { label: 'Pix', nextSection: null },
+      { label: 'Cartao', nextSection: null },
+      { label: 'Boleto', nextSection: null },
+      { label: 'Voltar ao inicio', nextSection: 0 },
+    ],
+  },
+  {
+    title: 'Suporte',
+    info: 'Suporte tecnico e pos-venda.',
+    message: '',
+    question: 'Qual assunto do suporte?',
+    options: [
+      { label: 'Instalacao', nextSection: null },
+      { label: 'Garantia', nextSection: null },
+      { label: 'Troca', nextSection: null },
+      { label: 'Voltar ao inicio', nextSection: 0 },
+    ],
+  },
+  {
+    title: 'Entrega',
+    info: 'Informacoes de envio e rastreio.',
+    message: '',
+    question: 'O que voce precisa na entrega?',
+    options: [
+      { label: 'Prazo', nextSection: null },
+      { label: 'Rastreamento', nextSection: null },
+      { label: 'Endereco', nextSection: null },
+      { label: 'Voltar ao inicio', nextSection: 0 },
+    ],
+  },
 ];
-
-const defaultFollowUps: Record<string, FollowUpConfig> = {
-  '0': {
-    question: 'Sobre pagamento, como podemos ajudar?',
-    options: ['Pix', 'Cartao', 'Boleto', 'Parcelamento', 'Falar com financeiro', 'Voltar ao menu principal'],
-  },
-  '1': {
-    question: 'Sobre entrega, o que voce precisa?',
-    options: ['Prazo', 'Rastreamento', 'Endereco', 'Reagendar', 'Retirada', 'Voltar ao menu principal'],
-  },
-  '2': {
-    question: 'Suporte tecnico: qual assunto?',
-    options: ['Problema no produto', 'Instalacao', 'Garantia', 'Troca', 'Outro', 'Voltar ao menu principal'],
-  },
-  '3': {
-    question: 'Promocoes: o que voce procura?',
-    options: ['Ofertas atuais', 'Cupons', 'Lancamentos', 'Combos', 'Avise-me', 'Voltar ao menu principal'],
-  },
-  '4': {
-    question: 'Informacoes gerais: escolha uma opcao',
-    options: ['Horarios', 'Enderecos', 'Catalogo', 'Contato', 'Falar com atendente', 'Voltar ao menu principal'],
-  },
-};
 
 export default function EnquetesPage() {
   const { token } = useAuth();
   const [name, setName] = useState('');
-  const [introTitle, setIntroTitle] = useState('Bem-vindo!');
-  const [introInfo, setIntroInfo] = useState('Selecione uma opcao para continuar.');
-  const [introMessage, setIntroMessage] = useState('Atendimento automatico 24h.');
-  const [question, setQuestion] = useState('Como podemos ajudar?');
-  const [options, setOptions] = useState<string[]>(defaultMenuOptions);
-  const [followUps, setFollowUps] = useState<Record<string, FollowUpConfig>>(
-    defaultFollowUps,
-  );
-  const [followUpFiles, setFollowUpFiles] = useState<Record<string, File | null>>({});
-  const [useNative, setUseNative] = useState(true);
-  const [file, setFile] = useState<File | null>(null);
+  const [sections, setSections] = useState<Section[]>(defaultSections);
+  const [sectionFiles, setSectionFiles] = useState<Record<string, File | null>>({});
   const [autoStart, setAutoStart] = useState(true);
   const [sendNow, setSendNow] = useState(false);
-  const [includeMenuReturn, setIncludeMenuReturn] = useState(true);
-  const [includeCancelOption, setIncludeCancelOption] = useState(true);
   const [pollsEnabled, setPollsEnabled] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -90,6 +118,9 @@ export default function EnquetesPage() {
   const [pollId, setPollId] = useState<string | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [counts, setCounts] = useState<Array<{ option: string; total: number }>>([]);
+  const [sectionSummary, setSectionSummary] = useState<Array<{ section: string; total: number }>>(
+    [],
+  );
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const api = apiBase
@@ -172,120 +203,113 @@ export default function EnquetesPage() {
     return groups.filter((group) => selectedGroups[group.id]).map((group) => group.id);
   }, [groups, selectedGroups]);
 
-  const updateOption = (index: number, value: string) => {
-    setOptions((prev) => prev.map((item, idx) => (idx === index ? value : item)));
-  };
-
-  const addOption = () => {
-    setOptions((prev) => {
-      const next = [...prev, ''];
-      setFollowUps((current) => ({
-        ...current,
-        [String(next.length - 1)]: current[String(next.length - 1)] || {
-          question: '',
-          options: [''],
-          introTitle: '',
-          introInfo: '',
-          introMessage: '',
-        },
-      }));
-      return next;
-    });
-  };
-
-  const removeOption = (index: number) => {
-    setOptions((prev) => {
-      const next = prev.filter((_, idx) => idx !== index);
-      setFollowUps((current) => {
-        const nextFollowUps: Record<string, FollowUpConfig> = {};
-        next.forEach((_, idx) => {
-          const sourceIndex = idx >= index ? idx + 1 : idx;
-          const source = current[String(sourceIndex)];
-          if (source) {
-            nextFollowUps[String(idx)] = source;
-          }
-        });
-        return nextFollowUps;
-      });
-      setFollowUpFiles((current) => {
-        const nextFiles: Record<string, File | null> = {};
-        next.forEach((_, idx) => {
-          const sourceIndex = idx >= index ? idx + 1 : idx;
-          if (current[String(sourceIndex)]) {
-            nextFiles[String(idx)] = current[String(sourceIndex)] || null;
-          }
-        });
-        return nextFiles;
-      });
-      return next;
-    });
-  };
-
-  const updateFollowUpQuestion = (index: number, value: string) => {
-    setFollowUps((prev) => ({
-      ...prev,
-      [String(index)]: {
-        question: value,
-        options: prev[String(index)]?.options || [''],
-        introTitle: prev[String(index)]?.introTitle || '',
-        introInfo: prev[String(index)]?.introInfo || '',
-        introMessage: prev[String(index)]?.introMessage || '',
-      },
-    }));
-  };
-
-  const updateFollowUpIntro = (
+  const updateSectionField = (
     index: number,
-    field: 'introTitle' | 'introInfo' | 'introMessage',
+    field: keyof Section,
     value: string,
   ) => {
-    setFollowUps((prev) => {
-      const current = prev[String(index)] || { question: '', options: [''] };
-      return {
-        ...prev,
-        [String(index)]: {
-          ...current,
-          [field]: value,
-        },
-      };
+    setSections((prev) =>
+      prev.map((section, idx) =>
+        idx === index ? { ...section, [field]: value } : section,
+      ),
+    );
+  };
+
+  const addSection = () => {
+    setSections((prev) => [
+      ...prev,
+      {
+        title: `Secao ${prev.length + 1}`,
+        info: '',
+        message: '',
+        question: 'Qual opcao voce deseja?',
+        options: [
+          { label: 'Opcao 1', nextSection: null },
+          { label: 'Opcao 2', nextSection: null },
+        ],
+      },
+    ]);
+  };
+
+  const removeSection = (index: number) => {
+    setSections((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      return next.map((section) => ({
+        ...section,
+        options: section.options.map((option) => {
+          if (option.nextSection === index) {
+            return { ...option, nextSection: null };
+          }
+          if (typeof option.nextSection === 'number' && option.nextSection > index) {
+            return { ...option, nextSection: option.nextSection - 1 };
+          }
+          return option;
+        }),
+      }));
+    });
+
+    setSectionFiles((prev) => {
+      const nextFiles: Record<string, File | null> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const currentIndex = Number.parseInt(key, 10);
+        if (Number.isNaN(currentIndex) || currentIndex === index) return;
+        const adjustedIndex = currentIndex > index ? currentIndex - 1 : currentIndex;
+        nextFiles[String(adjustedIndex)] = value;
+      });
+      return nextFiles;
     });
   };
 
-  const updateFollowUpOptions = (index: number, valueIndex: number, value: string) => {
-    setFollowUps((prev) => {
-      const current = prev[String(index)] || { question: '', options: [''] };
-      const optionsList = current.options.map((item, idx) => (idx === valueIndex ? value : item));
-      return {
-        ...prev,
-        [String(index)]: {
-          question: current.question,
-          options: optionsList,
-          introTitle: current.introTitle || '',
-          introInfo: current.introInfo || '',
-          introMessage: current.introMessage || '',
-        },
-      };
-    });
+  const addSectionOption = (sectionIndex: number) => {
+    setSections((prev) =>
+      prev.map((section, idx) =>
+        idx === sectionIndex
+          ? {
+              ...section,
+              options: [...section.options, { label: 'Nova opcao', nextSection: null }],
+            }
+          : section,
+      ),
+    );
   };
 
-  const addFollowUpOption = (index: number) => {
-    setFollowUps((prev) => {
-      const current = prev[String(index)] || { question: '', options: [''] };
-      return {
-        ...prev,
-        [String(index)]: {
-          question: current.question,
-          options: [...current.options, ''],
-          introTitle: current.introTitle || '',
-          introInfo: current.introInfo || '',
-          introMessage: current.introMessage || '',
-        },
-      };
-    });
+  const updateSectionOption = (
+    sectionIndex: number,
+    optionIndex: number,
+    field: 'label' | 'nextSection',
+    value: string,
+  ) => {
+    setSections((prev) =>
+      prev.map((section, idx) => {
+        if (idx !== sectionIndex) return section;
+        const nextOptions = section.options.map((option, optIdx) => {
+          if (optIdx !== optionIndex) return option;
+          if (field === 'nextSection') {
+            const parsed = Number.parseInt(value, 10);
+            return {
+              ...option,
+              nextSection: Number.isNaN(parsed) || parsed < 0 ? null : parsed,
+            };
+          }
+          return { ...option, label: value };
+        });
+        return { ...section, options: nextOptions };
+      }),
+    );
   };
 
-  const updateFollowUpFile = (index: number, fileValue: File | null) => {
-    setFollowUpFiles((prev) => ({
+  const removeSectionOption = (sectionIndex: number, optionIndex: number) => {
+    setSections((prev) =>
+      prev.map((section, idx) =>
+        idx === sectionIndex
+          ? { ...section, options: section.options.filter((_, optIdx) => optIdx !== optionIndex) }
+          : section,
+      ),
+    );
+  };
+
+  const updateSectionFile = (index: number, fileValue: File | null) => {
+    setSectionFiles((prev) => ({
       ...prev,
       [String(index)]: fileValue,
     }));
@@ -297,43 +321,29 @@ export default function EnquetesPage() {
       return;
     }
 
-    const cleanedOptions = options.map((option) => option.trim()).filter(Boolean);
-    const normalizedFollowUps = Object.entries(followUps).reduce(
-      (acc, [key, value]) => {
-        const questionValue = value.question?.trim() || '';
-        const cleanedFollowOptions = (value.options || [])
-          .map((option) => option.trim())
-          .filter(Boolean);
+    const normalizedSections = sections.map((section) => {
+      const cleanedOptions = section.options
+        .map((option) => ({
+          label: option.label.trim(),
+          nextSection: option.nextSection,
+        }))
+        .filter((option) => option.label);
 
-        const withMenuReturn = includeMenuReturn
-          ? cleanedFollowOptions.includes('Voltar ao menu principal')
-            ? cleanedFollowOptions
-            : [...cleanedFollowOptions, 'Voltar ao menu principal']
-          : cleanedFollowOptions;
+      return {
+        title: section.title.trim() || 'Secao',
+        info: section.info.trim() || undefined,
+        message: section.message.trim() || undefined,
+        question: section.question.trim(),
+        options: cleanedOptions,
+      };
+    });
 
-        const withCancelOption = includeCancelOption
-          ? withMenuReturn.includes('Cancelar')
-            ? withMenuReturn
-            : [...withMenuReturn, 'Cancelar']
-          : withMenuReturn;
-
-        if (questionValue && withCancelOption.length >= 2) {
-          acc[key] = {
-            question: questionValue,
-            options: withCancelOption,
-            introTitle: value.introTitle?.trim() || undefined,
-            introInfo: value.introInfo?.trim() || undefined,
-            introMessage: value.introMessage?.trim() || undefined,
-          };
-        }
-
-        return acc;
-      },
-      {} as Record<string, FollowUpConfig>,
+    const invalidSection = normalizedSections.find(
+      (section) => !section.question || section.options.length < 2,
     );
 
-    if (!name.trim() || !question.trim() || cleanedOptions.length < 2) {
-      setStatus('Preencha nome, pergunta e no minimo 2 opcoes');
+    if (!name.trim() || invalidSection) {
+      setStatus('Preencha nome, perguntas e no minimo 2 opcoes por secao');
       return;
     }
 
@@ -359,13 +369,10 @@ export default function EnquetesPage() {
         },
         body: JSON.stringify({
           name,
-          introTitle,
-          introInfo,
-          introMessage,
-          question,
-          options: cleanedOptions,
-          followUps: Object.keys(normalizedFollowUps).length ? normalizedFollowUps : undefined,
-          useNative,
+          question: normalizedSections[0].question,
+          options: normalizedSections[0].options.map((option) => option.label),
+          sections: normalizedSections,
+          useNative: true,
           autoStart,
         }),
       });
@@ -377,30 +384,15 @@ export default function EnquetesPage() {
       const poll = await pollResponse.json();
       setPollId(poll.id);
 
-      if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const uploadResponse = await fetch(`${api}/polls/${poll.id}/intro-file`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Falha ao anexar arquivo da introducao');
-        }
-      }
-
-      const followUpFileEntries = Object.entries(followUpFiles);
-      for (const [index, followUpFile] of followUpFileEntries) {
-        if (!followUpFile || !normalizedFollowUps[index]) continue;
+      const sectionFileEntries = Object.entries(sectionFiles);
+      for (const [index, sectionFile] of sectionFileEntries) {
+        if (!sectionFile) continue;
 
         const formData = new FormData();
-        formData.append('file', followUpFile);
+        formData.append('file', sectionFile);
 
         const uploadResponse = await fetch(
-          `${api}/polls/${poll.id}/followup-file/${index}`,
+          `${api}/polls/${poll.id}/section-file/${index}`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -409,7 +401,7 @@ export default function EnquetesPage() {
         );
 
         if (!uploadResponse.ok) {
-          throw new Error('Falha ao anexar arquivo do submenu');
+          throw new Error('Falha ao anexar arquivo da secao');
         }
       }
 
@@ -453,6 +445,7 @@ export default function EnquetesPage() {
     const data = await response.json();
     setInteractions(Array.isArray(data.interactions) ? data.interactions : []);
     setCounts(Array.isArray(data.counts) ? data.counts : []);
+    setSectionSummary(Array.isArray(data.sectionSummary) ? data.sectionSummary : []);
   };
 
   const inputClass =
@@ -589,182 +582,133 @@ export default function EnquetesPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Apresentacao</label>
-              <input
-                value={introTitle}
-                onChange={(event) => setIntroTitle(event.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Informacao</label>
-              <textarea
-                value={introInfo}
-                onChange={(event) => setIntroInfo(event.target.value)}
-                rows={2}
-                className={textAreaClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Mensagem</label>
-              <textarea
-                value={introMessage}
-                onChange={(event) => setIntroMessage(event.target.value)}
-                rows={3}
-                className={textAreaClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Pergunta do menu principal
-              </label>
-              <input
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Opcoes</label>
-              <div className="space-y-2">
-                {options.map((option, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      value={option}
-                      onChange={(event) => updateOption(index, event.target.value)}
-                      className={inputClass}
-                      placeholder={`Opcao ${index + 1}`}
-                    />
-                    {options.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        className="text-sm text-red-500"
-                      >
-                        Remover
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-semibold text-gray-700">Secoes do fluxo</label>
               <button
                 type="button"
-                onClick={addOption}
-                className="mt-2 text-sm text-whatsapp hover:text-whatsapp-dark"
+                onClick={addSection}
+                className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-700"
               >
-                + Adicionar opcao
+                + Adicionar secao
               </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Arquivo (opcional)</label>
-              <input
-                type="file"
-                onChange={(event) => setFile(event.target.files?.[0] || null)}
-                className="text-xs text-slate-600"
-              />
-              {file?.name && (
-                <p className="mt-1 text-xs text-slate-500">{file.name}</p>
-              )}
-            </div>
+            <div className="space-y-4">
+              {sections.map((section, sectionIndex) => (
+                <div key={sectionIndex} className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-700">
+                      Secao {sectionIndex + 1}
+                    </p>
+                    {sectionIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSection(sectionIndex)}
+                        className="text-xs font-semibold text-rose-500"
+                      >
+                        Remover secao
+                      </button>
+                    )}
+                  </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Submenus por opcao</label>
-              <div className="space-y-4">
-                {options.map((option, index) => (
-                  <div key={index} className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-700">
-                        Submenu: {option || `Opcao ${index + 1}`}
-                      </p>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                        #{index + 1}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                      <input
-                        value={followUps[String(index)]?.introTitle || ''}
-                        onChange={(event) =>
-                          updateFollowUpIntro(index, 'introTitle', event.target.value)
-                        }
-                        placeholder="Titulo do submenu"
-                        className={inputClass}
-                      />
-                      <input
-                        value={followUps[String(index)]?.introInfo || ''}
-                        onChange={(event) =>
-                          updateFollowUpIntro(index, 'introInfo', event.target.value)
-                        }
-                        placeholder="Informacao curta"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <textarea
-                      value={followUps[String(index)]?.introMessage || ''}
-                      onChange={(event) =>
-                        updateFollowUpIntro(index, 'introMessage', event.target.value)
-                      }
-                      placeholder="Mensagem adicional do submenu"
-                      rows={2}
-                      className={`${textAreaClass} mt-3`}
-                    />
-
-                    <div className="mt-3">
-                      <label className="block text-xs font-semibold text-slate-500 mb-2">
-                        Arquivo do submenu (opcional)
-                      </label>
-                      <input
-                        type="file"
-                        onChange={(event) =>
-                          updateFollowUpFile(index, event.target.files?.[0] || null)
-                        }
-                        className="text-xs text-slate-600"
-                      />
-                      {followUpFiles[String(index)]?.name && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          {followUpFiles[String(index)]?.name}
-                        </p>
-                      )}
-                    </div>
-
+                  <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <input
-                      value={followUps[String(index)]?.question || ''}
-                      onChange={(event) => updateFollowUpQuestion(index, event.target.value)}
-                      placeholder="Pergunta da enquete seguinte"
-                      className={`${inputClass} mt-4`}
+                      value={section.title}
+                      onChange={(event) => updateSectionField(sectionIndex, 'title', event.target.value)}
+                      placeholder="Titulo da secao"
+                      className={inputClass}
                     />
+                    <input
+                      value={section.info}
+                      onChange={(event) => updateSectionField(sectionIndex, 'info', event.target.value)}
+                      placeholder="Informacao curta"
+                      className={inputClass}
+                    />
+                  </div>
 
-                    <div className="mt-3 space-y-2">
-                      {(followUps[String(index)]?.options || ['']).map((value, optionIndex) => (
+                  <textarea
+                    value={section.message}
+                    onChange={(event) => updateSectionField(sectionIndex, 'message', event.target.value)}
+                    placeholder="Mensagem da secao"
+                    rows={2}
+                    className={`${textAreaClass} mt-3`}
+                  />
+
+                  <div className="mt-3">
+                    <label className="block text-xs font-semibold text-slate-500 mb-2">
+                      Arquivo da secao (opcional)
+                    </label>
+                    <input
+                      type="file"
+                      onChange={(event) =>
+                        updateSectionFile(sectionIndex, event.target.files?.[0] || null)
+                      }
+                      className="text-xs text-slate-600"
+                    />
+                    {sectionFiles[String(sectionIndex)]?.name && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {sectionFiles[String(sectionIndex)]?.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <input
+                    value={section.question}
+                    onChange={(event) => updateSectionField(sectionIndex, 'question', event.target.value)}
+                    placeholder="Pergunta da secao"
+                    className={`${inputClass} mt-4`}
+                  />
+
+                  <div className="mt-3 space-y-3">
+                    {section.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
                         <input
-                          key={optionIndex}
-                          value={value}
+                          value={option.label}
                           onChange={(event) =>
-                            updateFollowUpOptions(index, optionIndex, event.target.value)
+                            updateSectionOption(sectionIndex, optionIndex, 'label', event.target.value)
                           }
                           placeholder={`Opcao ${optionIndex + 1}`}
                           className={inputClass}
                         />
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => addFollowUpOption(index)}
-                      className="mt-3 text-sm font-semibold text-amber-700"
-                    >
-                      + Adicionar opcao
-                    </button>
+                        <select
+                          value={option.nextSection ?? -1}
+                          onChange={(event) =>
+                            updateSectionOption(
+                              sectionIndex,
+                              optionIndex,
+                              'nextSection',
+                              event.target.value,
+                            )
+                          }
+                          className={inputClass}
+                        >
+                          <option value={-1}>Encerrar</option>
+                          {sections.map((sectionItem, idx) => (
+                            <option key={idx} value={idx}>
+                              Secao {idx + 1} - {sectionItem.title || 'Sem titulo'}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeSectionOption(sectionIndex, optionIndex)}
+                          className="text-xs font-semibold text-rose-500"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+
+                  <button
+                    type="button"
+                    onClick={() => addSectionOption(sectionIndex)}
+                    className="mt-3 text-sm font-semibold text-amber-700"
+                  >
+                    + Adicionar opcao
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div className="space-y-3">
@@ -790,24 +734,6 @@ export default function EnquetesPage() {
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={includeMenuReturn}
-                  onChange={(event) => setIncludeMenuReturn(event.target.checked)}
-                />
-                Adicionar opcao "Voltar ao menu principal" nos submenus
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={includeCancelOption}
-                  onChange={(event) => setIncludeCancelOption(event.target.checked)}
-                />
-                Adicionar opcao "Cancelar" nos submenus
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
                   checked={sendNow}
                   onChange={(event) => setSendNow(event.target.checked)}
                 />
@@ -815,14 +741,9 @@ export default function EnquetesPage() {
               </label>
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={useNative}
-                onChange={(event) => setUseNative(event.target.checked)}
-              />
-              Usar enquete nativa (envia tambem fallback 1/2/3)
-            </label>
+            <p className="text-xs text-slate-500">
+              As enquetes usam somente o formato nativo do WhatsApp.
+            </p>
 
             {status && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -843,6 +764,21 @@ export default function EnquetesPage() {
         {pollId && (
           <div className="mt-10 rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-xl backdrop-blur">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Relatorio</h2>
+            <div className="mb-6">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Resumo por secao</p>
+              <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                {sectionSummary.map((item) => (
+                  <div key={item.section} className="rounded-2xl border border-slate-200 bg-white/70 p-3">
+                    <p className="text-sm font-semibold text-slate-700">{item.section}</p>
+                    <p className="text-lg font-bold text-slate-900">{item.total}</p>
+                  </div>
+                ))}
+                {sectionSummary.length === 0 && (
+                  <p className="text-sm text-slate-500">Sem interacoes ainda.</p>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-6">
               {counts.map((item) => (
                 <div key={item.option} className="rounded-2xl border border-slate-200 bg-white/70 p-3">
@@ -861,6 +797,12 @@ export default function EnquetesPage() {
                   <p className="font-semibold text-slate-700">
                     {interaction.selectedOption || interaction.rawText}
                   </p>
+                  {interaction.sectionTitle && (
+                    <p className="text-xs text-slate-500">{interaction.sectionTitle}</p>
+                  )}
+                  {interaction.phoneNumber && (
+                    <p className="text-xs text-slate-500">{interaction.phoneNumber}</p>
+                  )}
                   <p className="text-xs text-slate-500">
                     {new Date(interaction.createdAt).toLocaleString('pt-BR')}
                   </p>

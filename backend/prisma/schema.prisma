@@ -434,6 +434,7 @@ model PollCampaign {
   options         Json        // array de opcoes
   followUps       Json?       // mapa de opcao -> enquete
   useNative       Boolean     @default(true)
+  sections        Json?
   introTitle      String?
   introInfo       String?
   introMessage    String?

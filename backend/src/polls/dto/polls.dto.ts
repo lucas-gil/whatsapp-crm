@@ -1,5 +1,35 @@
-import { IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+
+class SectionOptionDto {
+  @IsString()
+  label!: string;
+
+  @IsOptional()
+  @IsNumber()
+  nextSection?: number | null;
+}
+
+class SectionDto {
+  @IsString()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  info?: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @IsString()
+  question!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionOptionDto)
+  options!: SectionOptionDto[];
+}
 
 export class CreatePollDto {
   @IsString()
@@ -17,15 +47,23 @@ export class CreatePollDto {
   @IsString()
   introMessage?: string;
 
+  @IsOptional()
   @IsString()
-  question!: string;
+  question?: string;
 
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  options!: string[];
+  options?: string[];
 
   @IsOptional()
   followUps?: Record<string, { question: string; options: string[] }>
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionDto)
+  sections?: SectionDto[];
 
   @IsOptional()
   @IsBoolean()
