@@ -204,12 +204,12 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         }
       });
 
-      socket.ev.on('contacts.set', (payload: any) => {
+      (socket.ev as any).on('contacts.set', (payload: any) => {
         const contactList = Array.isArray(payload?.contacts) ? payload.contacts : [];
         this.setContacts(workspaceId, contactList);
       });
 
-      socket.ev.on('contacts.upsert', (contacts: any[]) => {
+      (socket.ev as any).on('contacts.upsert', (contacts: any[]) => {
         this.upsertContacts(workspaceId, contacts || []);
       });
 
