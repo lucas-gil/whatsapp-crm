@@ -204,6 +204,7 @@ export class WhatsAppService {
     sendOptions?: { includeIntro?: boolean; sectionIndex?: number },
   ): Promise<string> {
     await this.ensurePollsEnabled(workspaceId);
+    const normalizedTarget = this.normalizeJid(targetJid);
     const sections = Array.isArray(campaign.sections) ? campaign.sections : null;
     const sectionIndex = sendOptions?.sectionIndex ?? 0;
 
@@ -214,7 +215,7 @@ export class WhatsAppService {
       }
 
       if (sendOptions?.includeIntro !== false) {
-        await this.sendIntroContent(workspaceId, targetJid, {
+        await this.sendIntroContent(workspaceId, normalizedTarget, {
           introTitle: section.title,
           introInfo: section.info,
           introMessage: section.message,
@@ -226,10 +227,10 @@ export class WhatsAppService {
 
       const labels = section.options.map((option: any) => option.label);
       const pollResponse = campaign.useNative
-        ? await this.sendPoll(workspaceId, targetJid, section.question, labels)
+        ? await this.sendPoll(workspaceId, normalizedTarget, section.question, labels)
         : await this.sendText(
             workspaceId,
-            targetJid,
+            normalizedTarget,
             this.buildPollFallback(section.question, labels),
           );
 
@@ -243,14 +244,14 @@ export class WhatsAppService {
     }
 
     if (sendOptions?.includeIntro !== false) {
-      await this.sendIntroContent(workspaceId, targetJid, campaign);
+      await this.sendIntroContent(workspaceId, normalizedTarget, campaign);
     }
 
     const pollResponse = campaign.useNative
-      ? await this.sendPoll(workspaceId, targetJid, campaign.question, pollOptions)
+      ? await this.sendPoll(workspaceId, normalizedTarget, campaign.question, pollOptions)
       : await this.sendText(
           workspaceId,
-          targetJid,
+          normalizedTarget,
           this.buildPollFallback(campaign.question, pollOptions),
         );
 
@@ -553,7 +554,8 @@ export class WhatsAppService {
 
     try {
       // Encontrar ou criar lead/conversa
-      const phoneNumber = from.replace('@s.whatsapp.net', '').replace('@g.us', '');
+      const phoneNumber = this.normalizePhoneNumber(from);
+      const normalizedFrom = this.normalizeJid(from);
 
       let lead = await this.prisma.lead.findFirst({
         where: {
@@ -624,10 +626,10 @@ export class WhatsAppService {
         await this.handleAutoPollStart(
           workspaceId,
           phoneNumber,
-          from,
+          normalizedFrom,
           isNewConversation,
         );
-        await this.handlePollResponse(workspaceId, phoneNumber, text, from);
+        await this.handlePollResponse(workspaceId, phoneNumber, text, normalizedFrom);
       }
     } catch (error) {
       this.logger.error(`Erro ao processar mensagem recebida:`, error);
@@ -1060,7 +1062,7 @@ export class WhatsAppService {
     const messageId = await this.sendPollCampaignMessage(
       workspaceId,
       campaign,
-      fromJid,
+      this.normalizeJid(fromJid),
       phoneNumber,
     );
 
@@ -1081,6 +1083,22 @@ export class WhatsAppService {
       .map((option, index) => `${index + 1}) ${option}`)
       .join('\n');
     return `🗳️ *Enquete*\n${question}\n\n${items}\n\nResponda com o numero da opcao.`;
+  }
+
+  private normalizePhoneNumber(jid: string): string {
+    return jid.replace(/@s\.whatsapp\.net|@g\.us|@lid/g, '');
+  }
+
+  private normalizeJid(jid: string): string {
+    if (!jid.includes('@')) {
+      return `${jid}@s.whatsapp.net`;
+    }
+
+    if (jid.endsWith('@lid')) {
+      return `${jid.replace('@lid', '')}@s.whatsapp.net`;
+    }
+
+    return jid;
   }
 
   async getSettings(workspaceId: string) {
