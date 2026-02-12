@@ -431,6 +431,13 @@ model PollCampaign {
   options         Json        // array de opcoes
   followUps       Json?       // mapa de opcao -> enquete
   useNative       Boolean     @default(true)
+  introTitle      String?
+  introInfo       String?
+  introMessage    String?
+  introFilePath   String?
+  introFileName   String?
+  introFileMime   String?
+  autoStart       Boolean     @default(false)
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

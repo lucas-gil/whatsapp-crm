@@ -5,6 +5,18 @@ export class CreatePollDto {
   @IsString()
   name!: string;
 
+  @IsOptional()
+  @IsString()
+  introTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  introInfo?: string;
+
+  @IsOptional()
+  @IsString()
+  introMessage?: string;
+
   @IsString()
   question!: string;
 
@@ -18,6 +30,10 @@ export class CreatePollDto {
   @IsOptional()
   @IsBoolean()
   useNative?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoStart?: boolean;
 }
 
 export class SendPollDto {

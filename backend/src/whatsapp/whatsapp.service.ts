@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from '../common/utils/logger.util';
 import { WhatsAppProvider } from './providers/whatsapp.provider.interface';
@@ -189,6 +190,45 @@ export class WhatsAppService {
     await this.logMessage(workspaceId, to, question, 'poll', messageId);
 
     return { messageId, status: 'sent', timestamp: new Date() };
+  }
+
+  /**
+   * Enviar campanha de enquete com introducao (texto/arquivo)
+   */
+  async sendPollCampaignMessage(
+    workspaceId: string,
+    campaign: any,
+    targetJid: string,
+    phoneNumber?: string,
+    sendOptions?: { includeIntro?: boolean },
+  ): Promise<string> {
+    const pollOptions = Array.isArray(campaign.options) ? campaign.options : [];
+
+    if (!pollOptions.length) {
+      throw new Error('Enquete sem opcoes');
+    }
+
+    if (sendOptions?.includeIntro !== false) {
+      await this.sendCampaignIntro(workspaceId, campaign, targetJid);
+    }
+
+    const pollResponse = campaign.useNative
+      ? await this.sendPoll(workspaceId, targetJid, campaign.question, pollOptions)
+      : await this.sendText(
+          workspaceId,
+          targetJid,
+          this.buildPollFallback(campaign.question, pollOptions),
+        );
+
+    if (campaign.useNative) {
+      await this.sendText(
+        workspaceId,
+        targetJid,
+        this.buildPollFallback(campaign.question, pollOptions),
+      );
+    }
+
+    return pollResponse.messageId;
   }
 
   /**
@@ -508,6 +548,18 @@ export class WhatsAppService {
       }
 
       // Criar/atualizar conversa
+      const existingConversation = await this.prisma.conversation.findUnique({
+        where: {
+          workspaceId_leadId_groupId: {
+            workspaceId,
+            leadId: lead.id,
+            groupId: null as any,
+          },
+        },
+      });
+
+      const isNewConversation = !existingConversation;
+
       const conversation = await this.prisma.conversation.upsert({
         where: {
           workspaceId_leadId_groupId: {
@@ -547,6 +599,12 @@ export class WhatsAppService {
       this.logger.info(`✅ Mensagem salva: ${messageId}`);
 
       if (!from.endsWith('@g.us')) {
+        await this.handleAutoPollStart(
+          workspaceId,
+          phoneNumber,
+          from,
+          isNewConversation,
+        );
         await this.handlePollResponse(workspaceId, phoneNumber, text, from);
       }
     } catch (error) {
@@ -718,6 +776,12 @@ export class WhatsAppService {
 
     const selectedOption = options[selectedIndex];
 
+    if (!selectedOption) {
+      return;
+    }
+
+    const isMenuReturn = this.isMenuReturnOption(selectedOption);
+
     await this.prisma.pollInteraction.create({
       data: {
         campaignId: recipient.campaignId,
@@ -737,6 +801,31 @@ export class WhatsAppService {
         respondedAt: new Date(),
       },
     });
+
+    if (isMenuReturn) {
+      const messageId = await this.sendPollCampaignMessage(
+        workspaceId,
+        recipient.campaign,
+        fromJid || `${phoneNumber}@s.whatsapp.net`,
+        phoneNumber,
+        { includeIntro: false },
+      );
+
+      await this.prisma.pollRecipient.create({
+        data: {
+          campaignId: recipient.campaignId,
+          targetJid: fromJid || `${phoneNumber}@s.whatsapp.net`,
+          phoneNumber,
+          targetType: 'contact',
+          pollMessageId: messageId,
+          status: 'SENT',
+          flowStep: 0,
+          parentRecipientId: recipient.id,
+        },
+      });
+
+      return;
+    }
 
     const followUps = recipient.campaign.followUps as Record<
       string,
@@ -777,6 +866,110 @@ export class WhatsAppService {
         },
       });
     }
+  }
+
+  private isMenuReturnOption(option: string): boolean {
+    const normalized = option.toLowerCase();
+    return normalized.includes('menu') || normalized.includes('inicio');
+  }
+
+  private buildCampaignIntroText(campaign: any): string | null {
+    const parts: string[] = [];
+
+    if (campaign.introTitle) {
+      parts.push(`*${campaign.introTitle}*`);
+    }
+
+    if (campaign.introInfo) {
+      parts.push(campaign.introInfo);
+    }
+
+    if (campaign.introMessage) {
+      parts.push(campaign.introMessage);
+    }
+
+    if (!parts.length) {
+      return null;
+    }
+
+    return parts.join('\n\n');
+  }
+
+  private async sendCampaignIntro(
+    workspaceId: string,
+    campaign: any,
+    targetJid: string,
+  ): Promise<void> {
+    const introText = this.buildCampaignIntroText(campaign);
+
+    if (introText) {
+      await this.sendText(workspaceId, targetJid, introText);
+    }
+
+    if (campaign.introFilePath && campaign.introFileName && campaign.introFileMime) {
+      try {
+        const buffer = fs.readFileSync(campaign.introFilePath);
+        await this.sendMedia(
+          workspaceId,
+          targetJid,
+          buffer,
+          campaign.introFileName,
+          campaign.introFileMime,
+        );
+      } catch (error) {
+        this.logger.warn('Falha ao enviar arquivo da introducao da enquete');
+      }
+    }
+  }
+
+  private async handleAutoPollStart(
+    workspaceId: string,
+    phoneNumber: string,
+    fromJid: string,
+    isNewConversation: boolean,
+  ): Promise<void> {
+    if (!isNewConversation) {
+      return;
+    }
+
+    const campaign = await (this.prisma as any).pollCampaign.findFirst({
+      where: { workspaceId, autoStart: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!campaign) {
+      return;
+    }
+
+    const existing = await this.prisma.pollRecipient.findFirst({
+      where: {
+        campaignId: campaign.id,
+        phoneNumber,
+        flowStep: 0,
+      },
+    });
+
+    if (existing) {
+      return;
+    }
+
+    const messageId = await this.sendPollCampaignMessage(
+      workspaceId,
+      campaign,
+      fromJid,
+      phoneNumber,
+    );
+
+    await this.prisma.pollRecipient.create({
+      data: {
+        campaignId: campaign.id,
+        targetJid: fromJid,
+        phoneNumber,
+        targetType: 'contact',
+        pollMessageId: messageId,
+        status: 'SENT',
+      },
+    });
   }
 
   private buildPollFallback(question: string, options: string[]) {

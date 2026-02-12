@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { PollsService } from './polls.service';
 import { CreatePollDto, SendPollDto } from './dto/polls.dto';
@@ -30,6 +42,20 @@ export class PollsController {
     @Body() dto: SendPollDto,
   ) {
     return this.pollsService.sendPoll(req.user.workspaceId, pollId, dto);
+  }
+
+  @Post(':id/intro-file')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadIntroFile(
+    @Request() req: any,
+    @Param('id') pollId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo nao enviado');
+    }
+
+    return this.pollsService.attachIntroFile(req.user.workspaceId, pollId, file);
   }
 
   @Get(':id/interactions')
