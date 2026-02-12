@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBroadcastDto, UpdateBroadcastDto, AddBroadcastRecipientsDto } from './dto/broadcast.dto';
 
@@ -11,19 +12,26 @@ export class BroadcastService {
    */
   async createBroadcast(workspaceId: string, dto: CreateBroadcastDto) {
     const scheduledFor = dto.scheduledFor ? new Date(dto.scheduledFor) : null;
+    const data: Prisma.BroadcastUncheckedCreateInput & {
+      scheduleConfig?: Prisma.InputJsonValue;
+      scheduleTimezone?: string | null;
+    } = {
+      workspaceId,
+      name: dto.name,
+      message: dto.message,
+      templateId: dto.templateId,
+      tagFilter: dto.tagFilter || [],
+      stageFilter: dto.stageFilter,
+      messagesPerMinute: dto.messagesPerMinute || 20,
+      scheduledFor,
+      scheduleConfig: dto.scheduleConfig || undefined,
+      scheduleTimezone: dto.scheduleTimezone,
+      status: scheduledFor ? 'SCHEDULED' : 'DRAFT',
+    };
+
     const broadcast = await this.prisma.broadcast.create({
       data: {
-        workspaceId,
-        name: dto.name,
-        message: dto.message,
-        templateId: dto.templateId,
-        tagFilter: dto.tagFilter || [],
-        stageFilter: dto.stageFilter,
-        messagesPerMinute: dto.messagesPerMinute || 20,
-        scheduledFor,
-        scheduleConfig: dto.scheduleConfig || undefined,
-        scheduleTimezone: dto.scheduleTimezone,
-        status: scheduledFor ? 'SCHEDULED' : 'DRAFT',
+        ...data,
       },
     });
 
@@ -95,16 +103,22 @@ export class BroadcastService {
     }
 
     const scheduledFor = dto.scheduledFor ? new Date(dto.scheduledFor) : undefined;
+    const data: Prisma.BroadcastUncheckedUpdateInput & {
+      scheduleConfig?: Prisma.InputJsonValue;
+      scheduleTimezone?: string | null;
+    } = {
+      name: dto.name,
+      message: dto.message,
+      messagesPerMinute: dto.messagesPerMinute,
+      scheduledFor,
+      scheduleConfig: dto.scheduleConfig,
+      scheduleTimezone: dto.scheduleTimezone,
+    };
 
     return this.prisma.broadcast.update({
       where: { id: broadcastId },
       data: {
-        name: dto.name,
-        message: dto.message,
-        messagesPerMinute: dto.messagesPerMinute,
-        scheduledFor,
-        scheduleConfig: dto.scheduleConfig,
-        scheduleTimezone: dto.scheduleTimezone,
+        ...data,
       },
     });
   }
