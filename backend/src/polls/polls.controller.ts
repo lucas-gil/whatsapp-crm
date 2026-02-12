@@ -58,6 +58,26 @@ export class PollsController {
     return this.pollsService.attachIntroFile(req.user.workspaceId, pollId, file);
   }
 
+  @Post(':id/followup-file/:index')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFollowUpFile(
+    @Request() req: any,
+    @Param('id') pollId: string,
+    @Param('index') index: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo nao enviado');
+    }
+
+    return this.pollsService.attachFollowUpFile(
+      req.user.workspaceId,
+      pollId,
+      index,
+      file,
+    );
+  }
+
   @Get(':id/interactions')
   async getInteractions(@Request() req: any, @Param('id') pollId: string) {
     return this.pollsService.getInteractions(req.user.workspaceId, pollId);

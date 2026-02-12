@@ -22,6 +22,14 @@ type Interaction = {
   createdAt: string;
 };
 
+type FollowUpConfig = {
+  question: string;
+  options: string[];
+  introTitle?: string;
+  introInfo?: string;
+  introMessage?: string;
+};
+
 const defaultMenuOptions = [
   'Pagamento',
   'Entrega',
@@ -30,7 +38,7 @@ const defaultMenuOptions = [
   'Informacoes',
 ];
 
-const defaultFollowUps: Record<string, { question: string; options: string[] }> = {
+const defaultFollowUps: Record<string, FollowUpConfig> = {
   '0': {
     question: 'Sobre pagamento, como podemos ajudar?',
     options: ['Pix', 'Cartao', 'Boleto', 'Parcelamento', 'Falar com financeiro', 'Voltar ao menu principal'],
@@ -61,9 +69,10 @@ export default function EnquetesPage() {
   const [introMessage, setIntroMessage] = useState('Atendimento automatico 24h.');
   const [question, setQuestion] = useState('Como podemos ajudar?');
   const [options, setOptions] = useState<string[]>(defaultMenuOptions);
-  const [followUps, setFollowUps] = useState<Record<string, { question: string; options: string[] }>>(
+  const [followUps, setFollowUps] = useState<Record<string, FollowUpConfig>>(
     defaultFollowUps,
   );
+  const [followUpFiles, setFollowUpFiles] = useState<Record<string, File | null>>({});
   const [useNative, setUseNative] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [autoStart, setAutoStart] = useState(true);
@@ -174,6 +183,9 @@ export default function EnquetesPage() {
         [String(next.length - 1)]: current[String(next.length - 1)] || {
           question: '',
           options: [''],
+          introTitle: '',
+          introInfo: '',
+          introMessage: '',
         },
       }));
       return next;
@@ -184,7 +196,7 @@ export default function EnquetesPage() {
     setOptions((prev) => {
       const next = prev.filter((_, idx) => idx !== index);
       setFollowUps((current) => {
-        const nextFollowUps: Record<string, { question: string; options: string[] }> = {};
+        const nextFollowUps: Record<string, FollowUpConfig> = {};
         next.forEach((_, idx) => {
           const sourceIndex = idx >= index ? idx + 1 : idx;
           const source = current[String(sourceIndex)];
@@ -193,6 +205,16 @@ export default function EnquetesPage() {
           }
         });
         return nextFollowUps;
+      });
+      setFollowUpFiles((current) => {
+        const nextFiles: Record<string, File | null> = {};
+        next.forEach((_, idx) => {
+          const sourceIndex = idx >= index ? idx + 1 : idx;
+          if (current[String(sourceIndex)]) {
+            nextFiles[String(idx)] = current[String(sourceIndex)] || null;
+          }
+        });
+        return nextFiles;
       });
       return next;
     });
@@ -204,8 +226,28 @@ export default function EnquetesPage() {
       [String(index)]: {
         question: value,
         options: prev[String(index)]?.options || [''],
+        introTitle: prev[String(index)]?.introTitle || '',
+        introInfo: prev[String(index)]?.introInfo || '',
+        introMessage: prev[String(index)]?.introMessage || '',
       },
     }));
+  };
+
+  const updateFollowUpIntro = (
+    index: number,
+    field: 'introTitle' | 'introInfo' | 'introMessage',
+    value: string,
+  ) => {
+    setFollowUps((prev) => {
+      const current = prev[String(index)] || { question: '', options: [''] };
+      return {
+        ...prev,
+        [String(index)]: {
+          ...current,
+          [field]: value,
+        },
+      };
+    });
   };
 
   const updateFollowUpOptions = (index: number, valueIndex: number, value: string) => {
@@ -217,6 +259,9 @@ export default function EnquetesPage() {
         [String(index)]: {
           question: current.question,
           options: optionsList,
+          introTitle: current.introTitle || '',
+          introInfo: current.introInfo || '',
+          introMessage: current.introMessage || '',
         },
       };
     });
@@ -230,9 +275,19 @@ export default function EnquetesPage() {
         [String(index)]: {
           question: current.question,
           options: [...current.options, ''],
+          introTitle: current.introTitle || '',
+          introInfo: current.introInfo || '',
+          introMessage: current.introMessage || '',
         },
       };
     });
+  };
+
+  const updateFollowUpFile = (index: number, fileValue: File | null) => {
+    setFollowUpFiles((prev) => ({
+      ...prev,
+      [String(index)]: fileValue,
+    }));
   };
 
   const handleSend = async () => {
@@ -259,12 +314,15 @@ export default function EnquetesPage() {
           acc[key] = {
             question: questionValue,
             options: withMenuReturn,
+            introTitle: value.introTitle?.trim() || undefined,
+            introInfo: value.introInfo?.trim() || undefined,
+            introMessage: value.introMessage?.trim() || undefined,
           };
         }
 
         return acc;
       },
-      {} as Record<string, { question: string; options: string[] }>,
+      {} as Record<string, FollowUpConfig>,
     );
 
     if (!name.trim() || !question.trim() || cleanedOptions.length < 2) {
@@ -327,6 +385,27 @@ export default function EnquetesPage() {
         }
       }
 
+      const followUpFileEntries = Object.entries(followUpFiles);
+      for (const [index, followUpFile] of followUpFileEntries) {
+        if (!followUpFile || !normalizedFollowUps[index]) continue;
+
+        const formData = new FormData();
+        formData.append('file', followUpFile);
+
+        const uploadResponse = await fetch(
+          `${api}/polls/${poll.id}/followup-file/${index}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          },
+        );
+
+        if (!uploadResponse.ok) {
+          throw new Error('Falha ao anexar arquivo do submenu');
+        }
+      }
+
       if (sendNow) {
         const sendResponse = await fetch(`${api}/polls/${poll.id}/send`, {
           method: 'POST',
@@ -369,32 +448,85 @@ export default function EnquetesPage() {
     setCounts(Array.isArray(data.counts) ? data.counts : []);
   };
 
+  const inputClass =
+    'w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-amber-200';
+  const textAreaClass =
+    'w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-amber-200';
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Enquetes (Poll)</h1>
-          <Link
-            href="/dashboard/disparos"
-            className="text-sm text-whatsapp hover:text-whatsapp-dark"
-          >
-            Voltar para Disparos
-          </Link>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#fff7ed,_#f8f4ef_45%,_#f1f5f9_100%)] text-slate-900">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;700&display=swap');
+        .polls-font { font-family: 'Space Grotesk', sans-serif; }
+        .polls-display { font-family: 'Fraunces', serif; }
+      `}</style>
+
+      <div className="polls-font max-w-6xl mx-auto px-6 py-10 lg:py-14">
+        <div className="mb-8 rounded-3xl border border-slate-200/70 bg-white/70 p-6 shadow-xl backdrop-blur">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Fluxo inteligente</p>
+              <h1 className="polls-display text-3xl font-semibold text-slate-900 lg:text-4xl">
+                Enquetes com menus e submenus
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Texto + arquivo opcional, cada resposta vira outra enquete. Perfeito para precos,
+                pagamento, suporte e entrega.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-amber-100 px-4 py-2 text-xs font-semibold text-amber-700">
+                Auto-atendimento
+              </span>
+              <Link
+                href="/dashboard/disparos"
+                className="text-xs font-semibold text-slate-600 transition hover:text-slate-900"
+              >
+                Voltar para Disparos
+              </Link>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            {
+              title: 'Preco e planos',
+              text: 'Mostre planos, anexos e leve o cliente direto ao pagamento.',
+            },
+            {
+              title: 'Suporte rapido',
+              text: 'Submenu com garantia, troca e atendimento humano sob demanda.',
+            },
+            {
+              title: 'Entrega e rastreio',
+              text: 'Perguntas prontas e arquivos com prazos ou politicas.',
+            },
+          ].map((idea) => (
+            <div
+              key={idea.title}
+              className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 text-sm text-slate-600 shadow-sm"
+            >
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-600">Ideia</p>
+              <p className="mt-2 text-base font-semibold text-slate-900">{idea.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{idea.text}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {sendNow && (
-            <div className="bg-white rounded-lg shadow-md p-6 lg:col-span-1">
-              <p className="text-sm font-semibold text-gray-700 mb-3">Destinatarios</p>
+            <div className="rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-lg backdrop-blur">
+              <p className="text-sm font-semibold text-slate-700 mb-3">Destinatarios</p>
               <div className="space-y-3">
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Contatos</p>
-                  <div className="border border-gray-200 rounded max-h-48 overflow-auto">
+                  <div className="max-h-48 overflow-auto rounded-2xl border border-slate-200 bg-white/70">
                     {contacts.length === 0 ? (
-                      <div className="p-3 text-xs text-gray-500">Nenhum contato encontrado.</div>
+                      <div className="p-3 text-xs text-slate-500">Nenhum contato encontrado.</div>
                     ) : (
                       contacts.map((contact) => (
-                        <label key={contact.id} className="flex gap-2 p-2 text-sm">
+                        <label key={contact.id} className="flex gap-2 p-2 text-sm text-slate-700">
                           <input
                             type="checkbox"
                             checked={!!selectedContacts[contact.id]}
@@ -414,12 +546,12 @@ export default function EnquetesPage() {
 
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Grupos</p>
-                  <div className="border border-gray-200 rounded max-h-48 overflow-auto">
+                  <div className="max-h-48 overflow-auto rounded-2xl border border-slate-200 bg-white/70">
                     {groups.length === 0 ? (
-                      <div className="p-3 text-xs text-gray-500">Nenhum grupo encontrado.</div>
+                      <div className="p-3 text-xs text-slate-500">Nenhum grupo encontrado.</div>
                     ) : (
                       groups.map((group) => (
-                        <label key={group.id} className="flex gap-2 p-2 text-sm">
+                        <label key={group.id} className="flex gap-2 p-2 text-sm text-slate-700">
                           <input
                             type="checkbox"
                             checked={!!selectedGroups[group.id]}
@@ -440,13 +572,13 @@ export default function EnquetesPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-lg shadow-md p-6 lg:col-span-2 space-y-6">
+          <div className="rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-xl backdrop-blur lg:col-span-2 space-y-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Nome</label>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
 
@@ -455,7 +587,7 @@ export default function EnquetesPage() {
               <input
                 value={introTitle}
                 onChange={(event) => setIntroTitle(event.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
 
@@ -465,7 +597,7 @@ export default function EnquetesPage() {
                 value={introInfo}
                 onChange={(event) => setIntroInfo(event.target.value)}
                 rows={2}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className={textAreaClass}
               />
             </div>
 
@@ -475,7 +607,7 @@ export default function EnquetesPage() {
                 value={introMessage}
                 onChange={(event) => setIntroMessage(event.target.value)}
                 rows={3}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className={textAreaClass}
               />
             </div>
 
@@ -486,7 +618,7 @@ export default function EnquetesPage() {
               <input
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                className={inputClass}
               />
             </div>
 
@@ -498,7 +630,7 @@ export default function EnquetesPage() {
                     <input
                       value={option}
                       onChange={(event) => updateOption(index, event.target.value)}
-                      className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                      className={inputClass}
                       placeholder={`Opcao ${index + 1}`}
                     />
                     {options.length > 2 && (
@@ -527,38 +659,99 @@ export default function EnquetesPage() {
               <input
                 type="file"
                 onChange={(event) => setFile(event.target.files?.[0] || null)}
+                className="text-xs text-slate-600"
               />
+              {file?.name && (
+                <p className="mt-1 text-xs text-slate-500">{file.name}</p>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Submenus por opcao</label>
               <div className="space-y-4">
                 {options.map((option, index) => (
-                  <div key={index} className="border border-gray-200 rounded p-3">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">
-                      Quando escolher: {option || `Opcao ${index + 1}`}
-                    </p>
+                  <div key={index} className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-700">
+                        Submenu: {option || `Opcao ${index + 1}`}
+                      </p>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                        #{index + 1}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      <input
+                        value={followUps[String(index)]?.introTitle || ''}
+                        onChange={(event) =>
+                          updateFollowUpIntro(index, 'introTitle', event.target.value)
+                        }
+                        placeholder="Titulo do submenu"
+                        className={inputClass}
+                      />
+                      <input
+                        value={followUps[String(index)]?.introInfo || ''}
+                        onChange={(event) =>
+                          updateFollowUpIntro(index, 'introInfo', event.target.value)
+                        }
+                        placeholder="Informacao curta"
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <textarea
+                      value={followUps[String(index)]?.introMessage || ''}
+                      onChange={(event) =>
+                        updateFollowUpIntro(index, 'introMessage', event.target.value)
+                      }
+                      placeholder="Mensagem adicional do submenu"
+                      rows={2}
+                      className={`${textAreaClass} mt-3`}
+                    />
+
+                    <div className="mt-3">
+                      <label className="block text-xs font-semibold text-slate-500 mb-2">
+                        Arquivo do submenu (opcional)
+                      </label>
+                      <input
+                        type="file"
+                        onChange={(event) =>
+                          updateFollowUpFile(index, event.target.files?.[0] || null)
+                        }
+                        className="text-xs text-slate-600"
+                      />
+                      {followUpFiles[String(index)]?.name && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {followUpFiles[String(index)]?.name}
+                        </p>
+                      )}
+                    </div>
+
                     <input
                       value={followUps[String(index)]?.question || ''}
                       onChange={(event) => updateFollowUpQuestion(index, event.target.value)}
                       placeholder="Pergunta da enquete seguinte"
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
+                      className={`${inputClass} mt-4`}
                     />
-                    {(followUps[String(index)]?.options || ['']).map((value, optionIndex) => (
-                      <input
-                        key={optionIndex}
-                        value={value}
-                        onChange={(event) =>
-                          updateFollowUpOptions(index, optionIndex, event.target.value)
-                        }
-                        placeholder={`Opcao ${optionIndex + 1}`}
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
-                      />
-                    ))}
+
+                    <div className="mt-3 space-y-2">
+                      {(followUps[String(index)]?.options || ['']).map((value, optionIndex) => (
+                        <input
+                          key={optionIndex}
+                          value={value}
+                          onChange={(event) =>
+                            updateFollowUpOptions(index, optionIndex, event.target.value)
+                          }
+                          placeholder={`Opcao ${optionIndex + 1}`}
+                          className={inputClass}
+                        />
+                      ))}
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => addFollowUpOption(index)}
-                      className="text-sm text-whatsapp"
+                      className="mt-3 text-sm font-semibold text-amber-700"
                     >
                       + Adicionar opcao
                     </button>
@@ -616,7 +809,7 @@ export default function EnquetesPage() {
             </label>
 
             {status && (
-              <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-3">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 {status}
               </div>
             )}
@@ -624,7 +817,7 @@ export default function EnquetesPage() {
             <button
               onClick={handleSend}
               disabled={loading}
-              className="w-full py-3 px-4 bg-whatsapp text-white rounded hover:bg-whatsapp-dark disabled:opacity-50"
+              className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:bg-slate-800 disabled:opacity-50"
             >
               {loading ? 'Salvando...' : sendNow ? 'Salvar e enviar' : 'Salvar fluxo'}
             </button>
@@ -632,27 +825,27 @@ export default function EnquetesPage() {
         </div>
 
         {pollId && (
-          <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Relatorio</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="mt-10 rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-xl backdrop-blur">
+            <h2 className="text-xl font-semibold text-slate-900 mb-4">Relatorio</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-6">
               {counts.map((item) => (
-                <div key={item.option} className="border border-gray-200 rounded p-3">
-                  <p className="text-sm font-semibold text-gray-700">{item.option}</p>
-                  <p className="text-lg font-bold text-gray-900">{item.total}</p>
+                <div key={item.option} className="rounded-2xl border border-slate-200 bg-white/70 p-3">
+                  <p className="text-sm font-semibold text-slate-700">{item.option}</p>
+                  <p className="text-lg font-bold text-slate-900">{item.total}</p>
                 </div>
               ))}
               {counts.length === 0 && (
-                <p className="text-sm text-gray-500">Sem interacoes ainda.</p>
+                <p className="text-sm text-slate-500">Sem interacoes ainda.</p>
               )}
             </div>
 
             <div className="space-y-2">
               {interactions.map((interaction, index) => (
-                <div key={index} className="border border-gray-200 rounded p-3 text-sm">
-                  <p className="font-semibold text-gray-700">
+                <div key={index} className="rounded-2xl border border-slate-200 bg-white/70 p-3 text-sm">
+                  <p className="font-semibold text-slate-700">
                     {interaction.selectedOption || interaction.rawText}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-slate-500">
                     {new Date(interaction.createdAt).toLocaleString('pt-BR')}
                   </p>
                 </div>

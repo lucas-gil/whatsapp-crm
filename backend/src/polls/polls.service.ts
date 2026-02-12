@@ -151,6 +151,49 @@ export class PollsService {
     });
   }
 
+  async attachFollowUpFile(
+    workspaceId: string,
+    pollId: string,
+    index: string,
+    file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo nao enviado');
+    }
+
+    const poll = await this.getPoll(workspaceId, pollId);
+    const followUps = (poll.followUps as Record<string, any>) || {};
+    const followUp = followUps[index];
+
+    if (!followUp) {
+      throw new BadRequestException('Submenu nao encontrado');
+    }
+
+    const storage = new StorageUtil({
+      provider: 'local',
+      path: process.env.STORAGE_PATH || './storage',
+    });
+
+    const extension = path.extname(file.originalname || '');
+    const safeName = `${poll.id}-${index}-${Date.now()}-${nanoid(6)}${extension}`;
+    const saved = await storage.saveFile(file.buffer, safeName, 'polls');
+
+    followUps[index] = {
+      ...followUp,
+      introFilePath: saved.path,
+      introFileName: file.originalname,
+      introFileMime: file.mimetype,
+    };
+
+    const prisma = this.prisma as any;
+    return prisma.pollCampaign.update({
+      where: { id: poll.id },
+      data: {
+        followUps,
+      },
+    });
+  }
+
   async getInteractions(workspaceId: string, pollId: string) {
     const poll = await this.getPoll(workspaceId, pollId);
 

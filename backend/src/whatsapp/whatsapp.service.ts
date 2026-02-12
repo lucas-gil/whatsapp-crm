@@ -211,7 +211,7 @@ export class WhatsAppService {
     }
 
     if (sendOptions?.includeIntro !== false) {
-      await this.sendCampaignIntro(workspaceId, campaign, targetJid);
+      await this.sendIntroContent(workspaceId, targetJid, campaign);
     }
 
     const pollResponse = campaign.useNative
@@ -829,12 +829,22 @@ export class WhatsAppService {
 
     const followUps = recipient.campaign.followUps as Record<
       string,
-      { question: string; options: string[] }
+      {
+        question: string;
+        options: string[];
+        introTitle?: string;
+        introInfo?: string;
+        introMessage?: string;
+        introFilePath?: string;
+        introFileName?: string;
+        introFileMime?: string;
+      }
     > | null;
 
     const followUp = followUps ? followUps[String(selectedIndex)] : undefined;
 
     if (followUp && followUp.options?.length) {
+      await this.sendIntroContent(workspaceId, `${phoneNumber}@s.whatsapp.net`, followUp);
       const response = recipient.campaign.useNative
         ? await this.sendPoll(workspaceId, phoneNumber, followUp.question, followUp.options)
         : await this.sendText(
@@ -873,19 +883,23 @@ export class WhatsAppService {
     return normalized.includes('menu') || normalized.includes('inicio');
   }
 
-  private buildCampaignIntroText(campaign: any): string | null {
+  private buildIntroText(source: {
+    introTitle?: string | null;
+    introInfo?: string | null;
+    introMessage?: string | null;
+  }): string | null {
     const parts: string[] = [];
 
-    if (campaign.introTitle) {
-      parts.push(`*${campaign.introTitle}*`);
+    if (source.introTitle) {
+      parts.push(`*${source.introTitle}*`);
     }
 
-    if (campaign.introInfo) {
-      parts.push(campaign.introInfo);
+    if (source.introInfo) {
+      parts.push(source.introInfo);
     }
 
-    if (campaign.introMessage) {
-      parts.push(campaign.introMessage);
+    if (source.introMessage) {
+      parts.push(source.introMessage);
     }
 
     if (!parts.length) {
@@ -895,26 +909,33 @@ export class WhatsAppService {
     return parts.join('\n\n');
   }
 
-  private async sendCampaignIntro(
+  private async sendIntroContent(
     workspaceId: string,
-    campaign: any,
     targetJid: string,
+    source: {
+      introTitle?: string | null;
+      introInfo?: string | null;
+      introMessage?: string | null;
+      introFilePath?: string | null;
+      introFileName?: string | null;
+      introFileMime?: string | null;
+    },
   ): Promise<void> {
-    const introText = this.buildCampaignIntroText(campaign);
+    const introText = this.buildIntroText(source);
 
     if (introText) {
       await this.sendText(workspaceId, targetJid, introText);
     }
 
-    if (campaign.introFilePath && campaign.introFileName && campaign.introFileMime) {
+    if (source.introFilePath && source.introFileName && source.introFileMime) {
       try {
-        const buffer = fs.readFileSync(campaign.introFilePath);
+        const buffer = fs.readFileSync(source.introFilePath);
         await this.sendMedia(
           workspaceId,
           targetJid,
           buffer,
-          campaign.introFileName,
-          campaign.introFileMime,
+          source.introFileName,
+          source.introFileMime,
         );
       } catch (error) {
         this.logger.warn('Falha ao enviar arquivo da introducao da enquete');
