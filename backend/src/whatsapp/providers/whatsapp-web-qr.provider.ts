@@ -23,7 +23,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private contacts: Map<string, any[]> = new Map();
 
   constructor(private configService: ConfigService) {
-    this.sessionStoragePath = path.join(process.cwd(), '.whatsapp-sessions');
+    const configuredPath =
+      this.configService.get('WHATSAPP_SESSION_PATH') ||
+      process.env.WHATSAPP_SESSION_PATH;
+
+    const legacyPath = path.join(process.cwd(), '.whatsapp-sessions');
+    const defaultPath = path.join(process.cwd(), 'sessions');
+
+    this.sessionStoragePath = configuredPath || (fs.existsSync(legacyPath) ? legacyPath : defaultPath);
     if (!fs.existsSync(this.sessionStoragePath)) {
       fs.mkdirSync(this.sessionStoragePath, { recursive: true });
     }

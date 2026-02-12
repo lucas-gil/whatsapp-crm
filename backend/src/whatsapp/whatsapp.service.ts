@@ -212,7 +212,31 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    return this.defaultProvider.listContacts(workspaceId);
+    const providerContacts = await this.defaultProvider.listContacts(workspaceId);
+    const leads = await this.prisma.lead.findMany({
+      where: { workspaceId },
+      select: { id: true, name: true, phoneNumber: true },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    const byPhone = new Map<string, any>();
+    providerContacts.forEach((contact: any) => {
+      if (!contact?.phoneNumber) return;
+      byPhone.set(contact.phoneNumber, contact);
+    });
+
+    leads.forEach((lead) => {
+      if (!byPhone.has(lead.phoneNumber)) {
+        byPhone.set(lead.phoneNumber, {
+          id: lead.id,
+          name: lead.name || lead.phoneNumber,
+          phoneNumber: lead.phoneNumber,
+        });
+      }
+    });
+
+    return Array.from(byPhone.values());
   }
 
   /**
@@ -529,42 +553,61 @@ export class WhatsAppService {
     messageId: string,
   ): Promise<void> {
     try {
-      const phoneNumber = to.replace('@s.whatsapp.net', '');
+      if (to.endsWith('@g.us')) {
+        return;
+      }
 
-      // Encontrar lead/conversa
-      const lead = await this.prisma.lead.findUnique({
+      const phoneNumber = to.replace('@s.whatsapp.net', '');
+      const lead = await this.prisma.lead.upsert({
         where: {
           workspaceId_phoneNumber: {
             workspaceId,
             phoneNumber,
           },
         },
+        update: {},
+        create: {
+          workspaceId,
+          phoneNumber,
+          name: phoneNumber,
+          origin: 'whatsapp_outgoing',
+          optIn: true,
+          optInDate: new Date(),
+        },
       });
 
-      if (lead) {
-        const conversation = await this.prisma.conversation.findFirst({
-          where: {
+      const conversation = await this.prisma.conversation.upsert({
+        where: {
+          workspaceId_leadId_groupId: {
             workspaceId,
             leadId: lead.id,
-            groupId: null,
+            groupId: null as any,
           },
-        });
+        },
+        update: {
+          lastMessageAt: new Date(),
+          lastMessage: text || `[${type}]`,
+        },
+        create: {
+          workspaceId,
+          leadId: lead.id,
+          lastMessageAt: new Date(),
+          lastMessage: text || `[${type}]`,
+        },
+      });
 
-        if (conversation) {
-          await this.prisma.message.create({
-            data: {
-              conversationId: conversation.id,
-              workspaceId,
-              whatsappMessageId: messageId,
-              direction: 'OUTGOING',
-              text: text,
-              type: type,
-              status: 'SENT',
-              createdAt: new Date(),
-            },
-          });
-        }
-      }
+      await this.prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          workspaceId,
+          whatsappMessageId: messageId,
+          direction: 'OUTGOING',
+          text: text,
+          type: type,
+          status: 'SENT',
+          createdAt: new Date(),
+        },
+      });
     } catch (error) {
       this.logger.error(`Erro ao logar mensagem:`, error);
     }
