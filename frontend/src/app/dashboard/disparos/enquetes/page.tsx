@@ -1,0 +1,505 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+
+type Contact = {
+  id: string;
+  name: string;
+  phoneNumber: string;
+};
+
+type Group = {
+  id: string;
+  name: string;
+  participantCount: number;
+};
+
+type Interaction = {
+  selectedOption?: string | null;
+  rawText?: string | null;
+  createdAt: string;
+};
+
+export default function EnquetesPage() {
+  const { token } = useAuth();
+  const [name, setName] = useState('');
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState<string[]>(['', '']);
+  const [followUps, setFollowUps] = useState<Record<string, { question: string; options: string[] }>>({});
+  const [useNative, setUseNative] = useState(true);
+  const [introMessage, setIntroMessage] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<Record<string, boolean>>({});
+  const [selectedGroups, setSelectedGroups] = useState<Record<string, boolean>>({});
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [pollId, setPollId] = useState<string | null>(null);
+  const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [counts, setCounts] = useState<Array<{ option: string; total: number }>>([]);
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
+
+  useEffect(() => {
+    if (!token) return;
+
+    const loadData = async () => {
+      try {
+        const [contactsResponse, groupsResponse] = await Promise.all([
+          fetch(`${api}/whatsapp/contacts`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${api}/whatsapp/groups`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (contactsResponse.ok) {
+          const data = await contactsResponse.json();
+          setContacts(Array.isArray(data) ? data : []);
+        }
+
+        if (groupsResponse.ok) {
+          const data = await groupsResponse.json();
+          setGroups(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        setStatus('Erro ao carregar contatos/grupos');
+      }
+    };
+
+    loadData();
+  }, [api, token]);
+
+  const selectedPhoneNumbers = useMemo(() => {
+    return contacts
+      .filter((contact) => selectedContacts[contact.id])
+      .map((contact) => contact.phoneNumber);
+  }, [contacts, selectedContacts]);
+
+  const selectedGroupIds = useMemo(() => {
+    return groups.filter((group) => selectedGroups[group.id]).map((group) => group.id);
+  }, [groups, selectedGroups]);
+
+  const updateOption = (index: number, value: string) => {
+    setOptions((prev) => prev.map((item, idx) => (idx === index ? value : item)));
+  };
+
+  const addOption = () => {
+    setOptions((prev) => [...prev, '']);
+  };
+
+  const removeOption = (index: number) => {
+    setOptions((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const updateFollowUpQuestion = (index: number, value: string) => {
+    setFollowUps((prev) => ({
+      ...prev,
+      [String(index)]: {
+        question: value,
+        options: prev[String(index)]?.options || [''],
+      },
+    }));
+  };
+
+  const updateFollowUpOptions = (index: number, valueIndex: number, value: string) => {
+    setFollowUps((prev) => {
+      const current = prev[String(index)] || { question: '', options: [''] };
+      const optionsList = current.options.map((item, idx) => (idx === valueIndex ? value : item));
+      return {
+        ...prev,
+        [String(index)]: {
+          question: current.question,
+          options: optionsList,
+        },
+      };
+    });
+  };
+
+  const addFollowUpOption = (index: number) => {
+    setFollowUps((prev) => {
+      const current = prev[String(index)] || { question: '', options: [''] };
+      return {
+        ...prev,
+        [String(index)]: {
+          question: current.question,
+          options: [...current.options, ''],
+        },
+      };
+    });
+  };
+
+  const handleSend = async () => {
+    if (!token) {
+      setStatus('Token nao disponivel');
+      return;
+    }
+
+    const cleanedOptions = options.map((option) => option.trim()).filter(Boolean);
+
+    if (!name.trim() || !question.trim() || cleanedOptions.length < 2) {
+      setStatus('Preencha nome, pergunta e no minimo 2 opcoes');
+      return;
+    }
+
+    if (!selectedPhoneNumbers.length && !selectedGroupIds.length) {
+      setStatus('Selecione contatos ou grupos');
+      return;
+    }
+
+    setLoading(true);
+    setStatus('');
+
+    try {
+      const pollResponse = await fetch(`${api}/polls`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          question,
+          options: cleanedOptions,
+          followUps,
+          useNative,
+        }),
+      });
+
+      if (!pollResponse.ok) {
+        throw new Error('Falha ao criar enquete');
+      }
+
+      const poll = await pollResponse.json();
+      setPollId(poll.id);
+
+      if (file) {
+        for (const phone of selectedPhoneNumbers) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('to', phone);
+          if (introMessage) formData.append('caption', introMessage);
+
+          await fetch(`${api}/whatsapp/send-media`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+        }
+
+        for (const group of selectedGroupIds) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('to', group);
+          if (introMessage) formData.append('caption', introMessage);
+
+          await fetch(`${api}/whatsapp/send-media`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+        }
+      } else if (introMessage) {
+        for (const phone of selectedPhoneNumbers) {
+          await fetch(`${api}/whatsapp/send-text`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to: phone, text: introMessage }),
+          });
+        }
+
+        for (const group of selectedGroupIds) {
+          await fetch(`${api}/whatsapp/send-text`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to: group, text: introMessage }),
+          });
+        }
+      }
+
+      const sendResponse = await fetch(`${api}/polls/${poll.id}/send`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumbers: selectedPhoneNumbers,
+          groupIds: selectedGroupIds,
+        }),
+      });
+
+      if (!sendResponse.ok) {
+        throw new Error('Falha ao enviar enquete');
+      }
+
+      setStatus('Enquete enviada com sucesso');
+      await loadInteractions(poll.id);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Erro ao enviar enquete');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadInteractions = async (id: string) => {
+    if (!token) return;
+    const response = await fetch(`${api}/polls/${id}/interactions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    setInteractions(Array.isArray(data.interactions) ? data.interactions : []);
+    setCounts(Array.isArray(data.counts) ? data.counts : []);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900">Enquetes (Poll)</h1>
+          <Link
+            href="/dashboard/disparos"
+            className="text-sm text-whatsapp hover:text-whatsapp-dark"
+          >
+            Voltar para Disparos
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow-md p-6 lg:col-span-1">
+            <p className="text-sm font-semibold text-gray-700 mb-3">Destinatarios</p>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Contatos</p>
+                <div className="border border-gray-200 rounded max-h-48 overflow-auto">
+                  {contacts.length === 0 ? (
+                    <div className="p-3 text-xs text-gray-500">Nenhum contato encontrado.</div>
+                  ) : (
+                    contacts.map((contact) => (
+                      <label key={contact.id} className="flex gap-2 p-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedContacts[contact.id]}
+                          onChange={() =>
+                            setSelectedContacts((prev) => ({
+                              ...prev,
+                              [contact.id]: !prev[contact.id],
+                            }))
+                          }
+                        />
+                        <span>{contact.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Grupos</p>
+                <div className="border border-gray-200 rounded max-h-48 overflow-auto">
+                  {groups.length === 0 ? (
+                    <div className="p-3 text-xs text-gray-500">Nenhum grupo encontrado.</div>
+                  ) : (
+                    groups.map((group) => (
+                      <label key={group.id} className="flex gap-2 p-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedGroups[group.id]}
+                          onChange={() =>
+                            setSelectedGroups((prev) => ({
+                              ...prev,
+                              [group.id]: !prev[group.id],
+                            }))
+                          }
+                        />
+                        <span>{group.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6 lg:col-span-2 space-y-6">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Nome</label>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Pergunta</label>
+              <input
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Opcoes</label>
+              <div className="space-y-2">
+                {options.map((option, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      value={option}
+                      onChange={(event) => updateOption(index, event.target.value)}
+                      className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                      placeholder={`Opcao ${index + 1}`}
+                    />
+                    {options.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(index)}
+                        className="text-sm text-red-500"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addOption}
+                className="mt-2 text-sm text-whatsapp hover:text-whatsapp-dark"
+              >
+                + Adicionar opcao
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Mensagem inicial</label>
+              <textarea
+                value={introMessage}
+                onChange={(event) => setIntroMessage(event.target.value)}
+                rows={3}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Midia (opcional)</label>
+              <input
+                type="file"
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Follow-up por opcao</label>
+              <div className="space-y-4">
+                {options.map((option, index) => (
+                  <div key={index} className="border border-gray-200 rounded p-3">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">
+                      Quando escolher: {option || `Opcao ${index + 1}`}
+                    </p>
+                    <input
+                      value={followUps[String(index)]?.question || ''}
+                      onChange={(event) => updateFollowUpQuestion(index, event.target.value)}
+                      placeholder="Pergunta da enquete seguinte"
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
+                    />
+                    {(followUps[String(index)]?.options || ['']).map((value, optionIndex) => (
+                      <input
+                        key={optionIndex}
+                        value={value}
+                        onChange={(event) =>
+                          updateFollowUpOptions(index, optionIndex, event.target.value)
+                        }
+                        placeholder={`Opcao ${optionIndex + 1}`}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2"
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addFollowUpOption(index)}
+                      className="text-sm text-whatsapp"
+                    >
+                      + Adicionar opcao
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useNative}
+                onChange={(event) => setUseNative(event.target.checked)}
+              />
+              Usar enquete nativa (envia tambem fallback 1/2/3)
+            </label>
+
+            {status && (
+              <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-3">
+                {status}
+              </div>
+            )}
+
+            <button
+              onClick={handleSend}
+              disabled={loading}
+              className="w-full py-3 px-4 bg-whatsapp text-white rounded hover:bg-whatsapp-dark disabled:opacity-50"
+            >
+              {loading ? 'Enviando...' : 'Enviar enquete'}
+            </button>
+          </div>
+        </div>
+
+        {pollId && (
+          <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Relatorio</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {counts.map((item) => (
+                <div key={item.option} className="border border-gray-200 rounded p-3">
+                  <p className="text-sm font-semibold text-gray-700">{item.option}</p>
+                  <p className="text-lg font-bold text-gray-900">{item.total}</p>
+                </div>
+              ))}
+              {counts.length === 0 && (
+                <p className="text-sm text-gray-500">Sem interacoes ainda.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {interactions.map((interaction, index) => (
+                <div key={index} className="border border-gray-200 rounded p-3 text-sm">
+                  <p className="font-semibold text-gray-700">
+                    {interaction.selectedOption || interaction.rawText}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(interaction.createdAt).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

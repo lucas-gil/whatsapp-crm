@@ -58,6 +58,31 @@ export default function DisparosPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="border-2 border-dashed border-gray-300 rounded p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">🗳️</span>
+                <h3 className="font-bold text-gray-900">Enquetes (Poll)</h3>
+              </div>
+              <p className="text-gray-500 text-sm mb-3">
+                Crie enquetes com respostas e follow-up automatico.
+              </p>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li>Enviar para leads e grupos</li>
+                <li>Opcoes com respostas guiadas</li>
+                <li>Relatorio de interacoes</li>
+              </ul>
+              <div className="mt-4">
+                <Link
+                  href="/dashboard/disparos/enquetes"
+                  className="inline-flex items-center justify-center px-4 py-2 bg-whatsapp text-white rounded hover:bg-whatsapp-dark"
+                >
+                  Criar Enquete
+                </Link>
+              </div>
+            </div>
+          </div>
+
           <div className="border-2 border-dashed border-gray-300 rounded p-6">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-2xl">🚀</span>

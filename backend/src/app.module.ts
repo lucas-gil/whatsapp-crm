@@ -11,6 +11,7 @@ import { QueueModule } from './queue/queue.module';
 import { AdminModule } from './admin/admin.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { BroadcastModule } from './broadcast/broadcast.module';
+import { PollsModule } from './polls/polls.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -31,6 +32,7 @@ import { AppService } from './app.service';
     AdminModule,
     WorkspaceModule,
     BroadcastModule,
+    PollsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

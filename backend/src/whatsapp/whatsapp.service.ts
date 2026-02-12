@@ -545,6 +545,10 @@ export class WhatsAppService {
       });
 
       this.logger.info(`✅ Mensagem salva: ${messageId}`);
+
+      if (!from.endsWith('@g.us')) {
+        await this.handlePollResponse(workspaceId, phoneNumber, text, from);
+      }
     } catch (error) {
       this.logger.error(`Erro ao processar mensagem recebida:`, error);
     }
@@ -675,5 +679,108 @@ export class WhatsAppService {
     } catch (error) {
       this.logger.error(`Erro ao logar mensagem:`, error);
     }
+  }
+
+  private async handlePollResponse(
+    workspaceId: string,
+    phoneNumber: string,
+    text?: string,
+    fromJid?: string,
+  ): Promise<void> {
+    if (!text) return;
+
+    const trimmed = text.trim();
+    const optionIndex = Number.parseInt(trimmed, 10);
+
+    if (!Number.isFinite(optionIndex)) {
+      return;
+    }
+
+    const recipient = await this.prisma.pollRecipient.findFirst({
+      where: {
+        phoneNumber,
+        status: 'SENT',
+      },
+      orderBy: { sentAt: 'desc' },
+      include: { campaign: true },
+    });
+
+    if (!recipient) return;
+
+    const options = Array.isArray(recipient.campaign.options)
+      ? (recipient.campaign.options as string[])
+      : [];
+    const selectedIndex = optionIndex - 1;
+
+    if (selectedIndex < 0 || selectedIndex >= options.length) {
+      return;
+    }
+
+    const selectedOption = options[selectedIndex];
+
+    await this.prisma.pollInteraction.create({
+      data: {
+        campaignId: recipient.campaignId,
+        recipientId: recipient.id,
+        fromJid: fromJid || `${phoneNumber}@s.whatsapp.net`,
+        selectedIndex,
+        selectedOption,
+        rawText: text,
+        flowStep: recipient.flowStep,
+      },
+    });
+
+    await this.prisma.pollRecipient.update({
+      where: { id: recipient.id },
+      data: {
+        status: 'RESPONDED',
+        respondedAt: new Date(),
+      },
+    });
+
+    const followUps = recipient.campaign.followUps as Record<
+      string,
+      { question: string; options: string[] }
+    > | null;
+
+    const followUp = followUps ? followUps[String(selectedIndex)] : undefined;
+
+    if (followUp && followUp.options?.length) {
+      const messageId = recipient.campaign.useNative
+        ? await this.sendPoll(workspaceId, phoneNumber, followUp.question, followUp.options)
+        : await this.sendText(
+            workspaceId,
+            phoneNumber,
+            this.buildPollFallback(followUp.question, followUp.options),
+          );
+
+      if (recipient.campaign.useNative) {
+        await this.sendText(
+          workspaceId,
+          phoneNumber,
+          this.buildPollFallback(followUp.question, followUp.options),
+        );
+      }
+
+      await this.prisma.pollRecipient.create({
+        data: {
+          campaignId: recipient.campaignId,
+          targetJid: `${phoneNumber}@s.whatsapp.net`,
+          phoneNumber,
+          targetType: 'contact',
+          pollMessageId: messageId,
+          status: 'SENT',
+          flowStep: recipient.flowStep + 1,
+          parentRecipientId: recipient.id,
+        },
+      });
+    }
+  }
+
+  private buildPollFallback(question: string, options: string[]) {
+    const items = options
+      .map((option, index) => `${index + 1}) ${option}`)
+      .join('\n');
+    return `🗳️ *Enquete*\n${question}\n\n${items}\n\nResponda com o numero da opcao.`;
   }
 }

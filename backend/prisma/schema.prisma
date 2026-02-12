@@ -28,6 +28,7 @@ model Workspace {
   groups        Group[]
   templates     Template[]
   broadcasts    Broadcast[]
+  pollCampaigns PollCampaign[]
   geminiSettings GeminiSettings?
   whatsappSettings WhatsAppSettings?
 
@@ -411,6 +412,78 @@ enum BroadcastRecipientStatus {
   FAILED
   OPTED_OUT
   INVALID_NUMBER
+}
+
+// ========== POLLS / ENQUETES ==========
+enum PollRecipientStatus {
+  SENT
+  RESPONDED
+  FAILED
+}
+
+model PollCampaign {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name            String
+  question        String
+  options         Json        // array de opcoes
+  followUps       Json?       // mapa de opcao -> enquete
+  useNative       Boolean     @default(true)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  recipients      PollRecipient[]
+  interactions    PollInteraction[]
+
+  @@index([workspaceId])
+  @@index([createdAt])
+}
+
+model PollRecipient {
+  id              String      @id @default(cuid())
+  campaignId      String
+  campaign        PollCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  targetJid       String
+  phoneNumber     String?
+  targetType      String      // contact | group
+
+  pollMessageId   String?
+  status          PollRecipientStatus @default(SENT)
+  sentAt          DateTime    @default(now())
+  respondedAt     DateTime?
+
+  flowStep        Int         @default(0)
+  parentRecipientId String?
+
+  interactions    PollInteraction[]
+
+  @@index([campaignId])
+  @@index([targetJid])
+  @@index([phoneNumber])
+}
+
+model PollInteraction {
+  id              String      @id @default(cuid())
+  campaignId      String
+  campaign        PollCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  recipientId     String
+  recipient       PollRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  fromJid         String
+  selectedIndex   Int?
+  selectedOption  String?
+  rawText         String?
+  flowStep        Int         @default(0)
+  createdAt       DateTime    @default(now())
+
+  @@index([campaignId])
+  @@index([recipientId])
+  @@index([createdAt])
 }
 
 model BroadcastRecipient {
