@@ -27,30 +27,61 @@ export default function DisparoNovoPage() {
       ? `${window.location.origin}/api`
       : 'http://localhost:3000';
 
-  useEffect(() => {
+  const fetchContacts = async () => {
     if (!token) return;
 
-    const fetchContacts = async () => {
-      try {
-        const response = await fetch(`${api}/whatsapp/contacts`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+    try {
+      const response = await fetch(`${api}/whatsapp/contacts`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-        if (!response.ok) {
-          throw new Error('Falha ao carregar contatos');
-        }
-
-        const data = await response.json();
-        setContacts(Array.isArray(data) ? data : []);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : 'Erro ao buscar contatos');
+      if (!response.ok) {
+        throw new Error('Falha ao carregar contatos');
       }
-    };
 
+      const data = await response.json();
+      setContacts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Erro ao buscar contatos');
+    }
+  };
+
+  useEffect(() => {
     fetchContacts();
   }, [api, token]);
+
+  const handleSyncContacts = async () => {
+    if (!token) {
+      setStatus('Token nao disponivel');
+      return;
+    }
+
+    setLoading(true);
+    setStatus('');
+
+    try {
+      const response = await fetch(`${api}/whatsapp/sync-contacts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao sincronizar contatos');
+      }
+
+      const data = await response.json();
+      setStatus(`Sincronizados: ${data.created || 0} novo(s)`);
+      await fetchContacts();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Erro ao sincronizar');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredContacts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -222,8 +253,16 @@ export default function DisparoNovoPage() {
               )}
             </div>
 
-            <div className="mb-4 text-sm text-gray-600">
-              Selecionados: {selectedContacts.length}
+            <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+              <span>Selecionados: {selectedContacts.length}</span>
+              <button
+                type="button"
+                onClick={handleSyncContacts}
+                disabled={loading}
+                className="text-whatsapp hover:text-whatsapp-dark"
+              >
+                Sincronizar contatos
+              </button>
             </div>
 
             {status && (

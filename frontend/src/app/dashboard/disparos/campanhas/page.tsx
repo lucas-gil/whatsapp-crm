@@ -108,6 +108,37 @@ export default function DisparoCampanhasPage() {
     }
   };
 
+  const handleSyncContacts = async () => {
+    if (!token) {
+      setStatus('Token nao disponivel');
+      return;
+    }
+
+    setLoading(true);
+    setStatus('');
+
+    try {
+      const response = await fetch(`${api}/whatsapp/sync-contacts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao sincronizar contatos');
+      }
+
+      const data = await response.json();
+      setStatus(`Sincronizados: ${data.created || 0} novo(s)`);
+      await fetchLeads();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Erro ao sincronizar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const computeNextRun = () => {
     const now = new Date();
     const [hours, minutes] = recurrenceTime.split(':').map(Number);
@@ -534,6 +565,14 @@ export default function DisparoCampanhasPage() {
               disabled={loading}
             >
               Atualizar audiencia
+            </button>
+            <button
+              type="button"
+              onClick={handleSyncContacts}
+              className="px-4 py-2 border border-whatsapp text-whatsapp rounded text-sm"
+              disabled={loading}
+            >
+              Sincronizar contatos
             </button>
             <span className="text-sm text-gray-600">
               Contatos encontrados: {filteredLeads.length}

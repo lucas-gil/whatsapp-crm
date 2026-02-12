@@ -171,6 +171,14 @@ export class WhatsAppController {
   }
 
   /**
+   * Sincronizar contatos do WhatsApp para o CRM
+   */
+  @Post('sync-contacts')
+  async syncContacts(@Request() req: any) {
+    return this.whatsAppService.syncContacts(req.user.workspaceId);
+  }
+
+  /**
    * Testar conexão
    */
   @Post('test')

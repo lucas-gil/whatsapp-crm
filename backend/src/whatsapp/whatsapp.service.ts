@@ -236,7 +236,71 @@ export class WhatsAppService {
       }
     });
 
-    return Array.from(byPhone.values());
+    return Array.from(byPhone.values()).sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'),
+    );
+  }
+
+  /**
+   * Sincronizar contatos para o CRM
+   */
+  async syncContacts(workspaceId: string) {
+    let providerContacts: any[] = [];
+
+    try {
+      providerContacts = await this.defaultProvider.listContacts(workspaceId);
+    } catch (error) {
+      this.logger.warn(`⚠️ Falha ao carregar contatos do WhatsApp: ${error}`);
+    }
+
+    const messagePhones = await this.prisma.message.findMany({
+      where: {
+        workspaceId,
+        senderPhoneNumber: { not: null },
+      },
+      select: { senderPhoneNumber: true },
+      distinct: ['senderPhoneNumber'],
+    });
+
+    const phones = new Set<string>();
+    messagePhones.forEach((item) => {
+      if (item.senderPhoneNumber) {
+        phones.add(item.senderPhoneNumber);
+      }
+    });
+    providerContacts.forEach((contact) => {
+      if (contact?.phoneNumber) {
+        phones.add(contact.phoneNumber);
+      }
+    });
+
+    let created = 0;
+
+    for (const phoneNumber of phones) {
+      const existing = await this.prisma.lead.findUnique({
+        where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } },
+      });
+
+      if (!existing) {
+        const contact = providerContacts.find((c) => c.phoneNumber === phoneNumber);
+        await this.prisma.lead.create({
+          data: {
+            workspaceId,
+            phoneNumber,
+            name: contact?.name || phoneNumber,
+            origin: 'whatsapp_sync',
+            optIn: true,
+            optInDate: new Date(),
+          },
+        });
+        created += 1;
+      }
+    }
+
+    return {
+      total: phones.size,
+      created,
+    };
   }
 
   /**
