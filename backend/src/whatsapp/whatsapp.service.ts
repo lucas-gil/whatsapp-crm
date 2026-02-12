@@ -560,25 +560,23 @@ export class WhatsAppService {
 
       const isNewConversation = !existingConversation;
 
-      const conversation = await this.prisma.conversation.upsert({
-        where: {
-          workspaceId_leadId_groupId: {
-            workspaceId,
-            leadId: lead.id,
-            groupId: null as any,
-          },
-        },
-        update: {
-          lastMessageAt: new Date(timestamp),
-          lastMessage: text || `[${type}]`,
-        },
-        create: {
-          workspaceId,
-          leadId: lead.id,
-          lastMessageAt: new Date(timestamp),
-          lastMessage: text || `[${type}]`,
-        },
-      });
+      const conversation = existingConversation
+        ? await this.prisma.conversation.update({
+            where: { id: existingConversation.id },
+            data: {
+              lastMessageAt: new Date(timestamp),
+              lastMessage: text || `[${type}]`,
+            },
+          })
+        : await this.prisma.conversation.create({
+            data: {
+              workspaceId,
+              leadId: lead.id,
+              groupId: null,
+              lastMessageAt: new Date(timestamp),
+              lastMessage: text || `[${type}]`,
+            },
+          });
 
       // Criar mensagem
       await this.prisma.message.create({
@@ -702,25 +700,31 @@ export class WhatsAppService {
         },
       });
 
-      const conversation = await this.prisma.conversation.upsert({
+      const existingConversation = await this.prisma.conversation.findFirst({
         where: {
-          workspaceId_leadId_groupId: {
-            workspaceId,
-            leadId: lead.id,
-            groupId: null as any,
-          },
-        },
-        update: {
-          lastMessageAt: new Date(),
-          lastMessage: text || `[${type}]`,
-        },
-        create: {
           workspaceId,
           leadId: lead.id,
-          lastMessageAt: new Date(),
-          lastMessage: text || `[${type}]`,
+          groupId: null,
         },
       });
+
+      const conversation = existingConversation
+        ? await this.prisma.conversation.update({
+            where: { id: existingConversation.id },
+            data: {
+              lastMessageAt: new Date(),
+              lastMessage: text || `[${type}]`,
+            },
+          })
+        : await this.prisma.conversation.create({
+            data: {
+              workspaceId,
+              leadId: lead.id,
+              groupId: null,
+              lastMessageAt: new Date(),
+              lastMessage: text || `[${type}]`,
+            },
+          });
 
       await this.prisma.message.create({
         data: {
