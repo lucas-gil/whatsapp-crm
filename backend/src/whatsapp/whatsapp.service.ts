@@ -550,13 +550,11 @@ export class WhatsAppService {
       }
 
       // Criar/atualizar conversa
-      const existingConversation = await this.prisma.conversation.findUnique({
+      const existingConversation = await this.prisma.conversation.findFirst({
         where: {
-          workspaceId_leadId_groupId: {
-            workspaceId,
-            leadId: lead.id,
-            groupId: null as any,
-          },
+          workspaceId,
+          leadId: lead.id,
+          groupId: null,
         },
       });
 
