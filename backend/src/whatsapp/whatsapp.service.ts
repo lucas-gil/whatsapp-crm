@@ -39,6 +39,7 @@ export class WhatsAppService {
           workspaceId,
           provider: this.configService.get('WHATSAPP_PROVIDER', 'web-qr'),
           isConnected: false,
+          pollsEnabled: true,
         },
       });
 
@@ -202,6 +203,7 @@ export class WhatsAppService {
     phoneNumber?: string,
     sendOptions?: { includeIntro?: boolean },
   ): Promise<string> {
+    await this.ensurePollsEnabled(workspaceId);
     const pollOptions = Array.isArray(campaign.options) ? campaign.options : [];
 
     if (!pollOptions.length) {
@@ -932,24 +934,17 @@ export class WhatsAppService {
       return;
     }
 
+    const settings = await this.getSettings(workspaceId);
+    if (settings && settings.pollsEnabled === false) {
+      return;
+    }
+
     const campaign = await (this.prisma as any).pollCampaign.findFirst({
       where: { workspaceId, autoStart: true },
       orderBy: { createdAt: 'desc' },
     });
 
     if (!campaign) {
-      return;
-    }
-
-    const existing = await this.prisma.pollRecipient.findFirst({
-      where: {
-        campaignId: campaign.id,
-        phoneNumber,
-        flowStep: 0,
-      },
-    });
-
-    if (existing) {
       return;
     }
 
@@ -977,5 +972,33 @@ export class WhatsAppService {
       .map((option, index) => `${index + 1}) ${option}`)
       .join('\n');
     return `🗳️ *Enquete*\n${question}\n\n${items}\n\nResponda com o numero da opcao.`;
+  }
+
+  async getSettings(workspaceId: string) {
+    return this.prisma.whatsAppSettings.findUnique({
+      where: { workspaceId },
+    });
+  }
+
+  async updateSettings(workspaceId: string, data: { pollsEnabled?: boolean }) {
+    return this.prisma.whatsAppSettings.upsert({
+      where: { workspaceId },
+      update: {
+        pollsEnabled: data.pollsEnabled,
+      },
+      create: {
+        workspaceId,
+        provider: this.configService.get('WHATSAPP_PROVIDER', 'web-qr'),
+        isConnected: false,
+        pollsEnabled: data.pollsEnabled ?? true,
+      },
+    });
+  }
+
+  private async ensurePollsEnabled(workspaceId: string): Promise<void> {
+    const settings = await this.getSettings(workspaceId);
+    if (settings && settings.pollsEnabled === false) {
+      throw new Error('Enquetes desativadas para este workspace');
+    }
   }
 }

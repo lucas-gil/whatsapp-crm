@@ -69,6 +69,8 @@ export default function EnquetesPage() {
   const [autoStart, setAutoStart] = useState(true);
   const [sendNow, setSendNow] = useState(false);
   const [includeMenuReturn, setIncludeMenuReturn] = useState(true);
+  const [pollsEnabled, setPollsEnabled] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<Record<string, boolean>>({});
@@ -91,11 +93,14 @@ export default function EnquetesPage() {
 
     const loadData = async () => {
       try {
-        const [contactsResponse, groupsResponse] = await Promise.all([
+        const [contactsResponse, groupsResponse, settingsResponse] = await Promise.all([
           fetch(`${api}/whatsapp/contacts`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
           fetch(`${api}/whatsapp/groups`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${api}/whatsapp/settings`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
@@ -109,13 +114,43 @@ export default function EnquetesPage() {
           const data = await groupsResponse.json();
           setGroups(Array.isArray(data) ? data : []);
         }
+
+        if (settingsResponse.ok) {
+          const data = await settingsResponse.json();
+          setPollsEnabled(data.pollsEnabled ?? true);
+        }
       } catch (error) {
         setStatus('Erro ao carregar contatos/grupos');
+      } finally {
+        setSettingsLoaded(true);
       }
     };
 
     loadData();
   }, [api, token]);
+
+  const handleTogglePolls = async (value: boolean) => {
+    if (!token) return;
+    setPollsEnabled(value);
+
+    try {
+      const response = await fetch(`${api}/whatsapp/settings`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pollsEnabled: value }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao atualizar configuracao');
+      }
+    } catch (error) {
+      setStatus('Nao foi possivel atualizar a configuracao de enquetes');
+      setPollsEnabled(!value);
+    }
+  };
 
   const selectedPhoneNumbers = useMemo(() => {
     return contacts
@@ -234,6 +269,11 @@ export default function EnquetesPage() {
 
     if (!name.trim() || !question.trim() || cleanedOptions.length < 2) {
       setStatus('Preencha nome, pergunta e no minimo 2 opcoes');
+      return;
+    }
+
+    if (!pollsEnabled) {
+      setStatus('As enquetes estao desativadas no WhatsApp');
       return;
     }
 
@@ -528,6 +568,16 @@ export default function EnquetesPage() {
             </div>
 
             <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={pollsEnabled}
+                  disabled={!settingsLoaded}
+                  onChange={(event) => handleTogglePolls(event.target.checked)}
+                />
+                Ativar enquetes no WhatsApp
+              </label>
+
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

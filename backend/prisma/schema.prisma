@@ -117,6 +117,9 @@ model WhatsAppSettings {
   // Opt-in/opt-out config
   requireOptIn    Boolean     @default(true)
   defaultOptInStatus Boolean  @default(true)
+
+  // Enquetes
+  pollsEnabled    Boolean     @default(true)
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

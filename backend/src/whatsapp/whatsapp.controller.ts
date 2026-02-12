@@ -188,4 +188,27 @@ export class WhatsAppController {
     );
     return { success, status: success ? 'connected' : 'disconnected' };
   }
+
+  @Get('settings')
+  async getSettings(@Request() req: any) {
+    const settings = await this.whatsAppService.getSettings(req.user.workspaceId);
+    return {
+      pollsEnabled: settings?.pollsEnabled ?? true,
+    };
+  }
+
+  @Post('settings')
+  async updateSettings(
+    @Request() req: any,
+    @Body() body: { pollsEnabled?: boolean },
+  ) {
+    const settings = await this.whatsAppService.updateSettings(
+      req.user.workspaceId,
+      { pollsEnabled: body.pollsEnabled },
+    );
+
+    return {
+      pollsEnabled: settings.pollsEnabled,
+    };
+  }
 }
