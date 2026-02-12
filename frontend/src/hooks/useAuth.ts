@@ -8,20 +8,29 @@ export function useAuth() {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+        const api = apiBase ? apiBase.replace(/\/$/, '') : '/api';
+
         // Verificar se já tem token no localStorage
         const storedToken = localStorage.getItem('authToken');
         
         if (storedToken) {
-          setToken(storedToken);
-          setLoading(false);
-          return;
+          const meResponse = await fetch(`${api}/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${storedToken}`,
+            },
+          });
+
+          if (meResponse.ok) {
+            setToken(storedToken);
+            setLoading(false);
+            return;
+          }
+
+          localStorage.removeItem('authToken');
         }
 
         // Se não tem token, buscar um token padrão
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-        const api = apiBase
-          ? apiBase.replace(/\/$/, '')
-          : '/api';
         const response = await fetch(`${api}/auth/default-token`);
         
         if (!response.ok) {
