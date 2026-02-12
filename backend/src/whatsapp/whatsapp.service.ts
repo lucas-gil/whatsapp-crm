@@ -746,13 +746,15 @@ export class WhatsAppService {
     const followUp = followUps ? followUps[String(selectedIndex)] : undefined;
 
     if (followUp && followUp.options?.length) {
-      const messageId = recipient.campaign.useNative
+      const response = recipient.campaign.useNative
         ? await this.sendPoll(workspaceId, phoneNumber, followUp.question, followUp.options)
         : await this.sendText(
             workspaceId,
             phoneNumber,
             this.buildPollFallback(followUp.question, followUp.options),
           );
+
+      const messageId = response.messageId;
 
       if (recipient.campaign.useNative) {
         await this.sendText(
