@@ -13,6 +13,7 @@ export class WhatsAppService {
   private providers: Map<string, WhatsAppProvider> = new Map();
   private defaultProvider: WhatsAppProvider;
   private eventCallbacks: Map<string, Set<Function>> = new Map();
+  private recentJids: Map<string, Map<string, string>> = new Map();
 
   constructor(
     private configService: ConfigService,
@@ -204,7 +205,7 @@ export class WhatsAppService {
     sendOptions?: { includeIntro?: boolean; sectionIndex?: number },
   ): Promise<string> {
     await this.ensurePollsEnabled(workspaceId);
-    const normalizedTarget = this.normalizeJid(targetJid);
+    const resolvedTarget = this.resolveTargetJid(workspaceId, targetJid);
     const sections = Array.isArray(campaign.sections) ? campaign.sections : null;
     const sectionIndex = sendOptions?.sectionIndex ?? 0;
 
@@ -227,10 +228,10 @@ export class WhatsAppService {
 
       const labels = section.options.map((option: any) => option.label);
       const pollResponse = campaign.useNative
-        ? await this.sendPoll(workspaceId, normalizedTarget, section.question, labels)
+        ? await this.sendPoll(workspaceId, resolvedTarget, section.question, labels)
         : await this.sendText(
             workspaceId,
-            normalizedTarget,
+            resolvedTarget,
             this.buildPollFallback(section.question, labels),
           );
 
@@ -244,14 +245,14 @@ export class WhatsAppService {
     }
 
     if (sendOptions?.includeIntro !== false) {
-      await this.sendIntroContent(workspaceId, normalizedTarget, campaign);
+      await this.sendIntroContent(workspaceId, resolvedTarget, campaign);
     }
 
     const pollResponse = campaign.useNative
-      ? await this.sendPoll(workspaceId, normalizedTarget, campaign.question, pollOptions)
+      ? await this.sendPoll(workspaceId, resolvedTarget, campaign.question, pollOptions)
       : await this.sendText(
           workspaceId,
-          normalizedTarget,
+          resolvedTarget,
           this.buildPollFallback(campaign.question, pollOptions),
         );
 
@@ -556,6 +557,7 @@ export class WhatsAppService {
       // Encontrar ou criar lead/conversa
       const phoneNumber = this.normalizePhoneNumber(from);
       const normalizedFrom = this.normalizeJid(from);
+      this.rememberJid(workspaceId, from);
 
       let lead = await this.prisma.lead.findFirst({
         where: {
@@ -707,7 +709,7 @@ export class WhatsAppService {
         return;
       }
 
-      const phoneNumber = to.replace('@s.whatsapp.net', '');
+      const phoneNumber = this.normalizePhoneNumber(to);
       const lead = await this.prisma.lead.upsert({
         where: {
           workspaceId_phoneNumber: {
@@ -843,7 +845,7 @@ export class WhatsAppService {
       data: {
         campaignId: recipient.campaignId,
         recipientId: recipient.id,
-        fromJid: fromJid || `${phoneNumber}@s.whatsapp.net`,
+        fromJid: this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
         selectedIndex,
         selectedOption: selectedOptionLabel,
         rawText: text,
@@ -863,7 +865,7 @@ export class WhatsAppService {
       const messageId = await this.sendPollCampaignMessage(
         workspaceId,
         recipient.campaign,
-        fromJid || `${phoneNumber}@s.whatsapp.net`,
+        this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
         phoneNumber,
         { includeIntro: false, sectionIndex: 0 },
       );
@@ -871,7 +873,7 @@ export class WhatsAppService {
       await this.prisma.pollRecipient.create({
         data: {
           campaignId: recipient.campaignId,
-          targetJid: fromJid || `${phoneNumber}@s.whatsapp.net`,
+          targetJid: this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
           phoneNumber,
           targetType: 'contact',
           pollMessageId: messageId,
@@ -901,7 +903,7 @@ export class WhatsAppService {
       const messageId = await this.sendPollCampaignMessage(
         workspaceId,
         recipient.campaign,
-        `${phoneNumber}@s.whatsapp.net`,
+        this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
         phoneNumber,
         { sectionIndex: nextSectionIndex },
       );
@@ -909,7 +911,7 @@ export class WhatsAppService {
       await this.prisma.pollRecipient.create({
         data: {
           campaignId: recipient.campaignId,
-          targetJid: `${phoneNumber}@s.whatsapp.net`,
+          targetJid: this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
           phoneNumber,
           targetType: 'contact',
           pollMessageId: messageId,
@@ -939,12 +941,21 @@ export class WhatsAppService {
     const followUp = followUps ? followUps[String(selectedIndex)] : undefined;
 
     if (followUp && followUp.options?.length) {
-      await this.sendIntroContent(workspaceId, `${phoneNumber}@s.whatsapp.net`, followUp);
+      await this.sendIntroContent(
+        workspaceId,
+        this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
+        followUp,
+      );
       const response = recipient.campaign.useNative
-        ? await this.sendPoll(workspaceId, phoneNumber, followUp.question, followUp.options)
+        ? await this.sendPoll(
+            workspaceId,
+            this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
+            followUp.question,
+            followUp.options,
+          )
         : await this.sendText(
             workspaceId,
-            phoneNumber,
+            this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
             this.buildPollFallback(followUp.question, followUp.options),
           );
 
@@ -953,7 +964,7 @@ export class WhatsAppService {
       await this.prisma.pollRecipient.create({
         data: {
           campaignId: recipient.campaignId,
-          targetJid: `${phoneNumber}@s.whatsapp.net`,
+          targetJid: this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
           phoneNumber,
           targetType: 'contact',
           pollMessageId: messageId,
@@ -1062,7 +1073,7 @@ export class WhatsAppService {
     const messageId = await this.sendPollCampaignMessage(
       workspaceId,
       campaign,
-      this.normalizeJid(fromJid),
+      this.resolveTargetJid(workspaceId, fromJid),
       phoneNumber,
     );
 
@@ -1093,12 +1104,32 @@ export class WhatsAppService {
     if (!jid.includes('@')) {
       return `${jid}@s.whatsapp.net`;
     }
+    
+    return jid;
+  }
 
-    if (jid.endsWith('@lid')) {
-      return `${jid.replace('@lid', '')}@s.whatsapp.net`;
+  private rememberJid(workspaceId: string, jid: string): void {
+    if (!jid) return;
+    const phoneNumber = this.normalizePhoneNumber(jid);
+    if (!phoneNumber) return;
+    const workspaceMap = this.recentJids.get(workspaceId) || new Map();
+    workspaceMap.set(phoneNumber, jid);
+    this.recentJids.set(workspaceId, workspaceMap);
+  }
+
+  private resolveTargetJid(workspaceId: string, target: string): string {
+    if (!target) {
+      return target;
     }
 
-    return jid;
+    if (target.includes('@')) {
+      const phoneNumber = this.normalizePhoneNumber(target);
+      const recent = this.recentJids.get(workspaceId)?.get(phoneNumber);
+      return recent || target;
+    }
+
+    const recent = this.recentJids.get(workspaceId)?.get(target);
+    return recent || `${target}@s.whatsapp.net`;
   }
 
   async getSettings(workspaceId: string) {
