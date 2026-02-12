@@ -216,7 +216,7 @@ export class WhatsAppService {
       }
 
       if (sendOptions?.includeIntro !== false) {
-        await this.sendIntroContent(workspaceId, normalizedTarget, {
+        await this.sendIntroContent(workspaceId, resolvedTarget, {
           introTitle: section.title,
           introInfo: section.info,
           introMessage: section.message,
