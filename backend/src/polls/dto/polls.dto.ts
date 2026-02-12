@@ -8,6 +8,18 @@ class SectionOptionDto {
   @IsOptional()
   @IsNumber()
   nextSection?: number | null;
+
+  @IsOptional()
+  @IsString()
+  replyTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  replyInfo?: string;
+
+  @IsOptional()
+  @IsString()
+  replyMessage?: string;
 }
 
 class SectionDto {

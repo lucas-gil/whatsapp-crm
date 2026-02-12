@@ -8,6 +8,7 @@ type Contact = {
   id: string;
   name: string;
   phoneNumber: string;
+  jid?: string | null;
 };
 
 type Group = {
@@ -27,6 +28,9 @@ type Interaction = {
 type SectionOption = {
   label: string;
   nextSection: number | null;
+  replyTitle: string;
+  replyInfo: string;
+  replyMessage: string;
 };
 
 type Section = {
@@ -44,11 +48,11 @@ const defaultSections: Section[] = [
     message: 'Atendimento automatico 24h.',
     question: 'Como podemos ajudar?',
     options: [
-      { label: 'Precos e planos', nextSection: 1 },
-      { label: 'Pagamento', nextSection: 2 },
-      { label: 'Suporte', nextSection: 3 },
-      { label: 'Entrega', nextSection: 4 },
-      { label: 'Falar com atendente', nextSection: null },
+      { label: 'Precos e planos', nextSection: 1, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Pagamento', nextSection: 2, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Suporte', nextSection: 3, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Entrega', nextSection: 4, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Falar com atendente', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
     ],
   },
   {
@@ -57,9 +61,9 @@ const defaultSections: Section[] = [
     message: '',
     question: 'Qual assunto sobre precos?',
     options: [
-      { label: 'Ver planos', nextSection: null },
-      { label: 'Falar com vendedor', nextSection: null },
-      { label: 'Voltar ao inicio', nextSection: 0 },
+      { label: 'Ver planos', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Falar com vendedor', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Voltar ao inicio', nextSection: 0, replyTitle: '', replyInfo: '', replyMessage: '' },
     ],
   },
   {
@@ -68,10 +72,10 @@ const defaultSections: Section[] = [
     message: '',
     question: 'Como podemos ajudar no pagamento?',
     options: [
-      { label: 'Pix', nextSection: null },
-      { label: 'Cartao', nextSection: null },
-      { label: 'Boleto', nextSection: null },
-      { label: 'Voltar ao inicio', nextSection: 0 },
+      { label: 'Pix', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Cartao', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Boleto', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Voltar ao inicio', nextSection: 0, replyTitle: '', replyInfo: '', replyMessage: '' },
     ],
   },
   {
@@ -80,10 +84,10 @@ const defaultSections: Section[] = [
     message: '',
     question: 'Qual assunto do suporte?',
     options: [
-      { label: 'Instalacao', nextSection: null },
-      { label: 'Garantia', nextSection: null },
-      { label: 'Troca', nextSection: null },
-      { label: 'Voltar ao inicio', nextSection: 0 },
+      { label: 'Instalacao', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Garantia', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Troca', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Voltar ao inicio', nextSection: 0, replyTitle: '', replyInfo: '', replyMessage: '' },
     ],
   },
   {
@@ -92,10 +96,10 @@ const defaultSections: Section[] = [
     message: '',
     question: 'O que voce precisa na entrega?',
     options: [
-      { label: 'Prazo', nextSection: null },
-      { label: 'Rastreamento', nextSection: null },
-      { label: 'Endereco', nextSection: null },
-      { label: 'Voltar ao inicio', nextSection: 0 },
+      { label: 'Prazo', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Rastreamento', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Endereco', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+      { label: 'Voltar ao inicio', nextSection: 0, replyTitle: '', replyInfo: '', replyMessage: '' },
     ],
   },
 ];
@@ -105,6 +109,7 @@ export default function EnquetesPage() {
   const [name, setName] = useState('');
   const [sections, setSections] = useState<Section[]>(defaultSections);
   const [sectionFiles, setSectionFiles] = useState<Record<string, File | null>>({});
+  const [optionFiles, setOptionFiles] = useState<Record<string, File | null>>({});
   const [autoStart, setAutoStart] = useState(true);
   const [sendNow, setSendNow] = useState(false);
   const [pollsEnabled, setPollsEnabled] = useState(true);
@@ -196,7 +201,7 @@ export default function EnquetesPage() {
   const selectedPhoneNumbers = useMemo(() => {
     return contacts
       .filter((contact) => selectedContacts[contact.id])
-      .map((contact) => contact.phoneNumber);
+      .map((contact) => contact.jid || contact.phoneNumber);
   }, [contacts, selectedContacts]);
 
   const selectedGroupIds = useMemo(() => {
@@ -224,8 +229,8 @@ export default function EnquetesPage() {
         message: '',
         question: 'Qual opcao voce deseja?',
         options: [
-          { label: 'Opcao 1', nextSection: null },
-          { label: 'Opcao 2', nextSection: null },
+          { label: 'Opcao 1', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+          { label: 'Opcao 2', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
         ],
       },
     ]);
@@ -258,6 +263,18 @@ export default function EnquetesPage() {
       });
       return nextFiles;
     });
+
+    setOptionFiles((prev) => {
+      const nextFiles: Record<string, File | null> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const [sectionKey, optionKey] = key.split('-');
+        const sectionIndex = Number.parseInt(sectionKey, 10);
+        if (Number.isNaN(sectionIndex) || sectionIndex === index) return;
+        const adjustedSection = sectionIndex > index ? sectionIndex - 1 : sectionIndex;
+        nextFiles[`${adjustedSection}-${optionKey}`] = value;
+      });
+      return nextFiles;
+    });
   };
 
   const addSectionOption = (sectionIndex: number) => {
@@ -266,7 +283,10 @@ export default function EnquetesPage() {
         idx === sectionIndex
           ? {
               ...section,
-              options: [...section.options, { label: 'Nova opcao', nextSection: null }],
+              options: [
+                ...section.options,
+                { label: 'Nova opcao', nextSection: null, replyTitle: '', replyInfo: '', replyMessage: '' },
+              ],
             }
           : section,
       ),
@@ -276,7 +296,7 @@ export default function EnquetesPage() {
   const updateSectionOption = (
     sectionIndex: number,
     optionIndex: number,
-    field: 'label' | 'nextSection',
+    field: 'label' | 'nextSection' | 'replyTitle' | 'replyInfo' | 'replyMessage',
     value: string,
   ) => {
     setSections((prev) =>
@@ -291,7 +311,10 @@ export default function EnquetesPage() {
               nextSection: Number.isNaN(parsed) || parsed < 0 ? null : parsed,
             };
           }
-          return { ...option, label: value };
+          if (field === 'label') {
+            return { ...option, label: value };
+          }
+          return { ...option, [field]: value };
         });
         return { ...section, options: nextOptions };
       }),
@@ -306,12 +329,41 @@ export default function EnquetesPage() {
           : section,
       ),
     );
+
+    setOptionFiles((prev) => {
+      const nextFiles: Record<string, File | null> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const [sectionKey, optionKey] = key.split('-');
+        const parsedSection = Number.parseInt(sectionKey, 10);
+        const parsedOption = Number.parseInt(optionKey, 10);
+        if (Number.isNaN(parsedSection) || Number.isNaN(parsedOption)) return;
+        if (parsedSection !== sectionIndex) {
+          nextFiles[key] = value;
+          return;
+        }
+        if (parsedOption === optionIndex) return;
+        const adjustedOption = parsedOption > optionIndex ? parsedOption - 1 : parsedOption;
+        nextFiles[`${parsedSection}-${adjustedOption}`] = value;
+      });
+      return nextFiles;
+    });
   };
 
   const updateSectionFile = (index: number, fileValue: File | null) => {
     setSectionFiles((prev) => ({
       ...prev,
       [String(index)]: fileValue,
+    }));
+  };
+
+  const updateOptionFile = (
+    sectionIndex: number,
+    optionIndex: number,
+    fileValue: File | null,
+  ) => {
+    setOptionFiles((prev) => ({
+      ...prev,
+      [`${sectionIndex}-${optionIndex}`]: fileValue,
     }));
   };
 
@@ -326,6 +378,9 @@ export default function EnquetesPage() {
         .map((option) => ({
           label: option.label.trim(),
           nextSection: option.nextSection,
+          replyTitle: option.replyTitle?.trim() || undefined,
+          replyInfo: option.replyInfo?.trim() || undefined,
+          replyMessage: option.replyMessage?.trim() || undefined,
         }))
         .filter((option) => option.label);
 
@@ -402,6 +457,29 @@ export default function EnquetesPage() {
 
         if (!uploadResponse.ok) {
           throw new Error('Falha ao anexar arquivo da secao');
+        }
+      }
+
+      const optionFileEntries = Object.entries(optionFiles);
+      for (const [key, optionFile] of optionFileEntries) {
+        if (!optionFile) continue;
+        const [sectionIndex, optionIndex] = key.split('-');
+        if (!sectionIndex || !optionIndex) continue;
+
+        const formData = new FormData();
+        formData.append('file', optionFile);
+
+        const uploadResponse = await fetch(
+          `${api}/polls/${poll.id}/section-option-file/${sectionIndex}/${optionIndex}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          },
+        );
+
+        if (!uploadResponse.ok) {
+          throw new Error('Falha ao anexar arquivo da opcao');
         }
       }
 
@@ -661,41 +739,109 @@ export default function EnquetesPage() {
 
                   <div className="mt-3 space-y-3">
                     {section.options.map((option, optionIndex) => (
-                      <div key={optionIndex} className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
-                        <input
-                          value={option.label}
-                          onChange={(event) =>
-                            updateSectionOption(sectionIndex, optionIndex, 'label', event.target.value)
-                          }
-                          placeholder={`Opcao ${optionIndex + 1}`}
-                          className={inputClass}
-                        />
-                        <select
-                          value={option.nextSection ?? -1}
+                      <div key={optionIndex} className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                        <div className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
+                          <input
+                            value={option.label}
+                            onChange={(event) =>
+                              updateSectionOption(sectionIndex, optionIndex, 'label', event.target.value)
+                            }
+                            placeholder={`Opcao ${optionIndex + 1}`}
+                            className={inputClass}
+                          />
+                          <select
+                            value={option.nextSection ?? -1}
+                            onChange={(event) =>
+                              updateSectionOption(
+                                sectionIndex,
+                                optionIndex,
+                                'nextSection',
+                                event.target.value,
+                              )
+                            }
+                            className={inputClass}
+                          >
+                            <option value={-1}>Encerrar</option>
+                            {sections.map((sectionItem, idx) => (
+                              <option key={idx} value={idx}>
+                                Secao {idx + 1} - {sectionItem.title || 'Sem titulo'}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => removeSectionOption(sectionIndex, optionIndex)}
+                            className="text-xs font-semibold text-rose-500"
+                          >
+                            Remover
+                          </button>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                          <input
+                            value={option.replyTitle}
+                            onChange={(event) =>
+                              updateSectionOption(
+                                sectionIndex,
+                                optionIndex,
+                                'replyTitle',
+                                event.target.value,
+                              )
+                            }
+                            placeholder="Titulo da resposta"
+                            className={inputClass}
+                          />
+                          <input
+                            value={option.replyInfo}
+                            onChange={(event) =>
+                              updateSectionOption(
+                                sectionIndex,
+                                optionIndex,
+                                'replyInfo',
+                                event.target.value,
+                              )
+                            }
+                            placeholder="Info da resposta"
+                            className={inputClass}
+                          />
+                        </div>
+
+                        <textarea
+                          value={option.replyMessage}
                           onChange={(event) =>
                             updateSectionOption(
                               sectionIndex,
                               optionIndex,
-                              'nextSection',
+                              'replyMessage',
                               event.target.value,
                             )
                           }
-                          className={inputClass}
-                        >
-                          <option value={-1}>Encerrar</option>
-                          {sections.map((sectionItem, idx) => (
-                            <option key={idx} value={idx}>
-                              Secao {idx + 1} - {sectionItem.title || 'Sem titulo'}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => removeSectionOption(sectionIndex, optionIndex)}
-                          className="text-xs font-semibold text-rose-500"
-                        >
-                          Remover
-                        </button>
+                          placeholder="Mensagem da resposta"
+                          rows={2}
+                          className={`${textAreaClass} mt-2`}
+                        />
+
+                        <div className="mt-2">
+                          <label className="block text-xs font-semibold text-slate-500 mb-2">
+                            Arquivo da resposta (opcional)
+                          </label>
+                          <input
+                            type="file"
+                            onChange={(event) =>
+                              updateOptionFile(
+                                sectionIndex,
+                                optionIndex,
+                                event.target.files?.[0] || null,
+                              )
+                            }
+                            className="text-xs text-slate-600"
+                          />
+                          {optionFiles[`${sectionIndex}-${optionIndex}`]?.name && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {optionFiles[`${sectionIndex}-${optionIndex}`]?.name}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

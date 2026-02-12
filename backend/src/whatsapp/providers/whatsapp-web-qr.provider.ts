@@ -657,7 +657,11 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
   private normalizeContacts(contacts: any[]): any[] {
     return contacts
-      .filter((contact) => contact?.id && String(contact.id).includes('@s.whatsapp.net'))
+      .filter((contact) => {
+        if (!contact?.id) return false;
+        const id = String(contact.id);
+        return id.includes('@s.whatsapp.net') || id.includes('@lid');
+      })
       .map((contact) => {
         const id = String(contact.id);
         const phoneNumber = id.split('@')[0];

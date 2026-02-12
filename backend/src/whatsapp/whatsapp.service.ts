@@ -289,6 +289,7 @@ export class WhatsAppService {
     });
 
     const byPhone = new Map<string, any>();
+    const recentJids = this.recentJids.get(workspaceId) || new Map();
     providerContacts.forEach((contact: any) => {
       if (!contact?.phoneNumber) return;
       byPhone.set(contact.phoneNumber, contact);
@@ -300,11 +301,17 @@ export class WhatsAppService {
           id: lead.id,
           name: lead.name || lead.phoneNumber,
           phoneNumber: lead.phoneNumber,
+          jid: recentJids.get(lead.phoneNumber) || null,
         });
       }
     });
 
-    return Array.from(byPhone.values()).sort((a, b) =>
+    return Array.from(byPhone.values()).map((contact) => {
+      if (!contact?.jid && contact?.id && String(contact.id).includes('@')) {
+        return { ...contact, jid: contact.id };
+      }
+      return contact;
+    }).sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'),
     );
   }
@@ -804,6 +811,14 @@ export class WhatsAppService {
 
     let selectedOptionLabel = '';
     let nextSectionIndex: number | null | undefined = undefined;
+    let selectedOptionReply: {
+      introTitle?: string | null;
+      introInfo?: string | null;
+      introMessage?: string | null;
+      introFilePath?: string | null;
+      introFileName?: string | null;
+      introFileMime?: string | null;
+    } | null = null;
 
     if (sections?.length) {
       const currentSection = sections[recipient.flowStep ?? 0];
@@ -820,6 +835,14 @@ export class WhatsAppService {
 
       selectedOptionLabel = selectedOption.label || '';
       nextSectionIndex = selectedOption.nextSection;
+      selectedOptionReply = {
+        introTitle: selectedOption.replyTitle,
+        introInfo: selectedOption.replyInfo,
+        introMessage: selectedOption.replyMessage,
+        introFilePath: selectedOption.replyFilePath,
+        introFileName: selectedOption.replyFileName,
+        introFileMime: selectedOption.replyFileMime,
+      };
     } else {
       const options = Array.isArray(recipient.campaign.options)
         ? (recipient.campaign.options as string[])
@@ -888,6 +911,22 @@ export class WhatsAppService {
 
     if (isCancelOption) {
       return;
+    }
+
+    if (selectedOptionReply) {
+      const hasReplyContent =
+        selectedOptionReply.introTitle ||
+        selectedOptionReply.introInfo ||
+        selectedOptionReply.introMessage ||
+        selectedOptionReply.introFilePath;
+
+      if (hasReplyContent) {
+        await this.sendIntroContent(
+          workspaceId,
+          this.resolveTargetJid(workspaceId, fromJid || phoneNumber),
+          selectedOptionReply,
+        );
+      }
     }
 
     if (sections?.length) {

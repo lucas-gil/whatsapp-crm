@@ -90,11 +90,15 @@ export class PollsService {
     const recipients: any[] = [];
 
     for (const phoneNumber of phoneNumbers) {
+      const normalizedPhone = phoneNumber.replace(/@s\.whatsapp\.net|@lid/g, '');
+      const targetJid = phoneNumber.includes('@')
+        ? phoneNumber
+        : `${phoneNumber}@s.whatsapp.net`;
       const messageId = await this.whatsAppService.sendPollCampaignMessage(
         workspaceId,
         poll,
-        phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`,
-        phoneNumber,
+        targetJid,
+        normalizedPhone || phoneNumber,
         { sectionIndex: 0 },
       );
 
@@ -102,8 +106,8 @@ export class PollsService {
         await prisma.pollRecipient.create({
           data: {
             campaignId: poll.id,
-            targetJid: phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`,
-            phoneNumber,
+            targetJid,
+            phoneNumber: normalizedPhone || phoneNumber,
             targetType: 'contact',
             pollMessageId: messageId,
             status: 'SENT',
@@ -246,6 +250,62 @@ export class PollsService {
       introFilePath: saved.path,
       introFileName: file.originalname,
       introFileMime: file.mimetype,
+    };
+
+    const prisma = this.prisma as any;
+    return prisma.pollCampaign.update({
+      where: { id: poll.id },
+      data: {
+        sections,
+      },
+    });
+  }
+
+  async attachSectionOptionFile(
+    workspaceId: string,
+    pollId: string,
+    sectionIndex: number,
+    optionIndex: number,
+    file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Arquivo nao enviado');
+    }
+
+    const poll = await this.getPoll(workspaceId, pollId);
+    const sections = Array.isArray(poll.sections) ? [...poll.sections] : [];
+    const section = sections[sectionIndex];
+
+    if (!section) {
+      throw new BadRequestException('Secao nao encontrada');
+    }
+
+    const options = Array.isArray(section.options) ? [...section.options] : [];
+    const option = options[optionIndex];
+
+    if (!option) {
+      throw new BadRequestException('Opcao nao encontrada');
+    }
+
+    const storage = new StorageUtil({
+      provider: 'local',
+      path: process.env.STORAGE_PATH || './storage',
+    });
+
+    const extension = path.extname(file.originalname || '');
+    const safeName = `${poll.id}-section-${sectionIndex}-option-${optionIndex}-${Date.now()}-${nanoid(6)}${extension}`;
+    const saved = await storage.saveFile(file.buffer, safeName, 'polls');
+
+    options[optionIndex] = {
+      ...option,
+      replyFilePath: saved.path,
+      replyFileName: file.originalname,
+      replyFileMime: file.mimetype,
+    };
+
+    sections[sectionIndex] = {
+      ...section,
+      options,
     };
 
     const prisma = this.prisma as any;
