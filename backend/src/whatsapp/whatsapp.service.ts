@@ -636,12 +636,7 @@ export class WhatsAppService {
       this.logger.info(`✅ Mensagem salva: ${messageId}`);
 
       if (!from.endsWith('@g.us')) {
-        await this.handleAutoPollStart(
-          workspaceId,
-          phoneNumber,
-          normalizedFrom,
-          isNewConversation,
-        );
+        await this.handleAutoPollStart(workspaceId, phoneNumber, normalizedFrom);
         await this.handlePollResponse(workspaceId, phoneNumber, text, normalizedFrom);
       }
     } catch (error) {
@@ -1093,11 +1088,7 @@ export class WhatsAppService {
     workspaceId: string,
     phoneNumber: string,
     fromJid: string,
-    isNewConversation: boolean,
   ): Promise<void> {
-    if (!isNewConversation) {
-      return;
-    }
 
     const settings = await this.getSettings(workspaceId);
     if (settings && settings.pollsEnabled === false) {
@@ -1110,6 +1101,19 @@ export class WhatsAppService {
     });
 
     if (!campaign) {
+      return;
+    }
+
+    const existingRecipient = await this.prisma.pollRecipient.findFirst({
+      where: {
+        campaignId: campaign.id,
+        phoneNumber,
+        status: 'SENT',
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+
+    if (existingRecipient) {
       return;
     }
 
