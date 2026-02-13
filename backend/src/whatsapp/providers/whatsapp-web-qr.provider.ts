@@ -514,6 +514,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
     try {
       const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+      this.logger.info(
+        `🧪 Enviando enquete: jid=${jid} options=${options.length} question=${question.substring(0, 40)}`,
+      );
       const response = await socket.sendMessage(jid, {
         poll: {
           name: question,

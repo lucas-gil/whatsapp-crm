@@ -206,6 +206,10 @@ export class WhatsAppService {
   ): Promise<string> {
     await this.ensurePollsEnabled(workspaceId);
     const resolvedTarget = this.resolveTargetJid(workspaceId, targetJid);
+    this.logger.info(
+      `🧭 Envio de enquete: target=${targetJid} resolved=${resolvedTarget} ` +
+        `section=${sendOptions?.sectionIndex ?? 0}`,
+    );
     const sections = Array.isArray(campaign.sections) ? campaign.sections : null;
     const sectionIndex = sendOptions?.sectionIndex ?? 0;
 
