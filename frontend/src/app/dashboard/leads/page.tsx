@@ -173,33 +173,37 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f7f3ea,_#eef2f6_60%,_#e8eff7_100%)]">
+    <div className="min-h-screen bg-[#0b141a]">
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;700&display=swap');
-        .leads-ui { font-family: 'Space Grotesk', sans-serif; }
-        .leads-ui-display { font-family: 'Newsreader', serif; }
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap');
+        .leads-ui { font-family: 'Manrope', sans-serif; }
+        .leads-ui-display { font-family: 'Sora', sans-serif; }
+        .wa-chat-bg {
+          background-image: radial-gradient(circle at 1px 1px, rgba(134, 150, 160, 0.18) 1px, transparent 0);
+          background-size: 24px 24px;
+        }
       `}</style>
 
-      <div className="leads-ui max-w-[1400px] mx-auto p-6 lg:p-10">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="leads-ui mx-auto max-w-[1600px] px-4 py-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-white">
           <div>
-            <h1 className="leads-ui-display text-3xl lg:text-4xl text-slate-900">Leads</h1>
-            <p className="text-sm text-slate-500">
-              Organize contatos e grupos com funil, tags e historico.
+            <h1 className="leads-ui-display text-2xl tracking-tight">Leads</h1>
+            <p className="text-xs text-slate-300">
+              Visual estilo WhatsApp com funil, tags e organizacao.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={loadData}
-              className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm text-slate-700"
+              className="rounded-full border border-[#2a3942] bg-[#111b21] px-4 py-2 text-xs text-slate-200"
             >
               Atualizar
             </button>
             <button
               type="button"
               onClick={() => setEditPipeline((prev) => !prev)}
-              className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm text-slate-700"
+              className="rounded-full border border-[#2a3942] bg-[#111b21] px-4 py-2 text-xs text-slate-200"
             >
               {editPipeline ? 'Fechar funil' : 'Editar funil'}
             </button>
@@ -207,38 +211,60 @@ export default function LeadsPage() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
+          <div className="mb-4 rounded-xl border border-rose-400/60 bg-rose-500/20 p-3 text-rose-100">
             {error}
           </div>
         )}
 
         {editPipeline && (
-          <div className="mb-6 rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-700 mb-3">Pipeline</p>
+          <div className="mb-5 rounded-2xl border border-[#2a3942] bg-[#111b21] p-4 text-white">
+            <p className="text-sm font-semibold mb-3">Pipeline</p>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               {pipeline.map((stage, index) => (
                 <input
                   key={stage + index}
                   value={stage}
                   onChange={(event) => handlePipelineRename(index, event.target.value)}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="rounded-xl border border-[#2a3942] bg-[#0b141a] px-3 py-2 text-sm text-white"
                 />
               ))}
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6">
-          <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur">
-            <div className="p-4 border-b border-slate-200">
-              <div className="flex items-center gap-2 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr_320px] gap-0 rounded-2xl overflow-hidden border border-[#2a3942] shadow-2xl">
+          <div className="bg-[#111b21] text-white">
+            <div className="flex items-center justify-between border-b border-[#202c33] px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-[#00a884] flex items-center justify-center text-xs font-semibold">
+                  CRM
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Caixa de entrada</p>
+                  <p className="text-[11px] text-slate-400">{filteredLeads.length} contatos</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-slate-400">
+                <button type="button" className="rounded-full px-2 py-1 text-xs">+</button>
+                <button type="button" className="rounded-full px-2 py-1 text-xs">⋮</button>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-b border-[#202c33]">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Pesquisar ou iniciar conversa"
+                className="w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
+              />
+              <div className="mt-3 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveTab('contatos')}
-                  className={`px-3 py-2 rounded-full text-xs font-semibold border ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${
                     activeTab === 'contatos'
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 text-slate-500'
+                      ? 'border-[#00a884] text-[#00a884]'
+                      : 'border-[#202c33] text-slate-400'
                   }`}
                 >
                   Contatos
@@ -246,29 +272,28 @@ export default function LeadsPage() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('grupos')}
-                  className={`px-3 py-2 rounded-full text-xs font-semibold border ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${
                     activeTab === 'grupos'
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 text-slate-500'
+                      ? 'border-[#00a884] text-[#00a884]'
+                      : 'border-[#202c33] text-slate-400'
                   }`}
                 >
                   Grupos
                 </button>
+                <button
+                  type="button"
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold border border-[#202c33] text-slate-400"
+                >
+                  Nao lidas
+                </button>
               </div>
 
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por nome, telefone"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-
               {activeTab === 'contatos' && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 grid grid-cols-1 gap-2">
                   <select
                     value={stageFilter}
                     onChange={(event) => setStageFilter(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                   >
                     <option value="">Todas as etapas</option>
                     {stageOptions.map((stage) => (
@@ -281,21 +306,21 @@ export default function LeadsPage() {
                     value={tagFilter}
                     onChange={(event) => setTagFilter(event.target.value)}
                     placeholder="Filtrar por tag"
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                   />
                 </div>
               )}
             </div>
 
-            <div className="max-h-[640px] overflow-auto">
+            <div className="max-h-[calc(100vh-260px)] overflow-auto">
               {activeTab === 'grupos' ? (
-                <div className="p-4 text-sm text-slate-500">
+                <div className="p-4 text-sm text-slate-400">
                   {groups.length === 0 ? 'Nenhum grupo sincronizado.' : ''}
                   <div className="space-y-3">
                     {groups.map((group) => (
-                      <div key={group.id} className="rounded-2xl border border-slate-200 bg-white p-3">
-                        <p className="text-sm font-semibold text-slate-700">{group.name}</p>
-                        <p className="text-xs text-slate-500">
+                      <div key={group.id} className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
+                        <p className="text-sm font-semibold text-white">{group.name}</p>
+                        <p className="text-xs text-slate-400">
                           {group.participantCount} participantes
                         </p>
                       </div>
@@ -303,9 +328,9 @@ export default function LeadsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-200">
+                <div className="divide-y divide-[#202c33]">
                   {filteredLeads.length === 0 && (
-                    <p className="p-4 text-sm text-slate-500">Nenhum lead encontrado.</p>
+                    <p className="p-4 text-sm text-slate-400">Nenhum lead encontrado.</p>
                   )}
                   {filteredLeads.map((lead) => {
                     const stageLabel = lead.pipelineStage || 'Novo';
@@ -318,40 +343,44 @@ export default function LeadsPage() {
                         key={lead.id}
                         type="button"
                         onClick={() => setSelectedLeadId(lead.id)}
-                        className={`w-full text-left p-4 transition ${
-                          selectedLeadId === lead.id ? 'bg-slate-100' : 'hover:bg-slate-50'
+                        className={`w-full text-left px-4 py-3 transition ${
+                          selectedLeadId === lead.id ? 'bg-[#202c33]' : 'hover:bg-[#1f2a30]'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-sm font-semibold">
+                          <div className="h-10 w-10 rounded-full bg-[#2a3942] text-white flex items-center justify-center text-sm font-semibold">
                             {lead.name?.slice(0, 2).toUpperCase()}
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-semibold text-slate-800">{lead.name}</p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-sm font-semibold text-white">{lead.name}</p>
+                            <p className="text-xs text-slate-400">
                               {lead.lastMessage || 'Sem mensagens recentes'}
                             </p>
                           </div>
+                          <span className="text-[10px] text-slate-400">
+                            {lead.lastMessageAt ? new Date(lead.lastMessageAt).toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }) : ''}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1">
                           <span
-                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                              stageStyles[stageLabel] || 'bg-slate-100 text-slate-700'
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              stageStyles[stageLabel] || 'bg-[#202c33] text-slate-200'
                             }`}
                           >
                             {stageLabel}
                           </span>
+                          {tagList.slice(0, 2).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full bg-[#202c33] px-2 py-0.5 text-[10px] text-slate-300"
+                            >
+                              {tag}
+                            </span>
+                          ))}
                         </div>
-                        {tagList.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {tagList.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </button>
                     );
                   })}
@@ -360,39 +389,42 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur flex flex-col">
-            <div className="border-b border-slate-200 p-4 flex items-center justify-between">
+          <div className="bg-[#0b141a] text-white flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#202c33] px-4 py-3">
               {selectedLead ? (
-                <div>
-                  <p className="text-sm text-slate-500">Conversa</p>
-                  <p className="text-lg font-semibold text-slate-900">{selectedLead.name}</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-[#2a3942] flex items-center justify-center text-sm font-semibold">
+                    {selectedLead.name?.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{selectedLead.name}</p>
+                    <p className="text-[11px] text-slate-400">Online agora</p>
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Selecione um lead</p>
+                <p className="text-sm text-slate-400">Selecione um lead</p>
               )}
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
-              >
-                Anexar arquivo
-              </button>
+              <div className="flex items-center gap-2 text-slate-400">
+                <button type="button" className="rounded-full px-2 py-1 text-xs">🔍</button>
+                <button type="button" className="rounded-full px-2 py-1 text-xs">⋮</button>
+              </div>
             </div>
 
-            <div className="flex-1 p-4 space-y-4 overflow-auto">
+            <div className="wa-chat-bg flex-1 p-6 space-y-4 overflow-auto">
               {selectedLead && chatMessages.length === 0 && (
-                <p className="text-sm text-slate-500">Nenhuma mensagem ainda.</p>
+                <p className="text-sm text-slate-400">Nenhuma mensagem ainda.</p>
               )}
               {chatMessages.map((message) => (
                 <div
                   key={message.id}
-                  className={`max-w-[70%] rounded-3xl px-4 py-2 text-sm ${
+                  className={`max-w-[72%] rounded-2xl px-4 py-2 text-sm shadow ${
                     message.from === 'me'
-                      ? 'bg-slate-900 text-white ml-auto'
-                      : 'bg-slate-100 text-slate-700'
+                      ? 'bg-[#005c4b] text-white ml-auto'
+                      : 'bg-[#202c33] text-slate-100'
                   }`}
                 >
                   <p>{message.text}</p>
-                  <p className="mt-1 text-[10px] opacity-70">
+                  <p className="mt-1 text-[10px] text-slate-300">
                     {new Date(message.timestamp).toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -402,18 +434,20 @@ export default function LeadsPage() {
               ))}
             </div>
 
-            <div className="border-t border-slate-200 p-4">
+            <div className="border-t border-[#202c33] px-4 py-3">
               <div className="flex items-center gap-2">
+                <button type="button" className="text-slate-400">😊</button>
+                <button type="button" className="text-slate-400">📎</button>
                 <input
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
                   placeholder="Digite uma mensagem"
-                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  className="flex-1 rounded-2xl border border-[#202c33] bg-[#1f2a30] px-3 py-2 text-sm text-white"
                 />
                 <button
                   type="button"
                   onClick={handleSendMessage}
-                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-2xl bg-[#00a884] px-4 py-2 text-sm font-semibold text-[#0b141a]"
                 >
                   Enviar
                 </button>
@@ -421,10 +455,10 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white/80 shadow-lg backdrop-blur">
-            <div className="border-b border-slate-200 p-4">
-              <p className="text-sm text-slate-500">Detalhes do lead</p>
-              <p className="text-lg font-semibold text-slate-900">
+          <div className="bg-[#111b21] text-white">
+            <div className="border-b border-[#202c33] px-4 py-3">
+              <p className="text-xs uppercase text-slate-400">Detalhes do lead</p>
+              <p className="text-lg font-semibold">
                 {selectedLead?.name || 'Sem lead selecionado'}
               </p>
             </div>
@@ -446,7 +480,7 @@ export default function LeadsPage() {
                           ),
                         );
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                     >
                       {stageOptions.map((stage) => (
                         <option key={stage} value={stage}>
@@ -465,7 +499,7 @@ export default function LeadsPage() {
                       ].map((tag) => (
                         <span
                           key={tag}
-                          className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600"
+                          className="flex items-center gap-1 rounded-full bg-[#202c33] px-3 py-1 text-xs text-slate-200"
                         >
                           {tag}
                           <button
@@ -486,7 +520,7 @@ export default function LeadsPage() {
                           (event.target as HTMLInputElement).value = '';
                         }
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                     />
                   </div>
 
@@ -502,37 +536,37 @@ export default function LeadsPage() {
                       }
                       placeholder="Escreva observacoes importantes"
                       rows={4}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 text-sm">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
                       <p className="text-xs text-slate-400">Telefone</p>
-                      <p className="text-slate-700">{selectedLead.phoneNumber || '-'}</p>
+                      <p className="text-slate-100">{selectedLead.phoneNumber || '-'}</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
                       <p className="text-xs text-slate-400">Email</p>
-                      <p className="text-slate-700">{selectedLead.email || '-'}</p>
+                      <p className="text-slate-100">{selectedLead.email || '-'}</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
                       <p className="text-xs text-slate-400">Status</p>
-                      <p className="text-slate-700">
+                      <p className="text-slate-100">
                         {selectedLead.optIn === false ? 'Opt-out' : 'Opt-in'}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
                       <p className="text-xs text-slate-400">Origem</p>
-                      <p className="text-slate-700">{selectedLead.origin || '-'}</p>
+                      <p className="text-slate-100">{selectedLead.origin || '-'}</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
                       <p className="text-xs text-slate-400">Responsavel</p>
-                      <p className="text-slate-700">{selectedLead.responsibleUser || '-'}</p>
+                      <p className="text-slate-100">{selectedLead.responsibleUser || '-'}</p>
                     </div>
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-500">Selecione um lead para ver detalhes.</p>
+                <p className="text-sm text-slate-400">Selecione um lead para ver detalhes.</p>
               )}
             </div>
           </div>
