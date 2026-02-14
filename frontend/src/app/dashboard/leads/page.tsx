@@ -46,6 +46,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncAttempted, setSyncAttempted] = useState(false);
   const [activeTab, setActiveTab] = useState<'contatos' | 'grupos'>('contatos');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -59,34 +62,82 @@ export default function LeadsPage() {
   const [messagesByLead, setMessagesByLead] = useState<Record<string, ChatMessage[]>>({});
 
   useEffect(() => {
+    if (!token) return;
     loadData();
   }, [token]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      const [leadsResponse, groupsResponse] = await Promise.all([
-        fetch('/api/crm/leads', { headers }),
-        fetch('/api/whatsapp/groups', { headers }),
-      ]);
+      const headers = { Authorization: `Bearer ${token}` };
+      const list = await fetchLeads(headers);
+      await fetchGroups(headers);
 
-      if (leadsResponse.ok) {
-        const data = await leadsResponse.json();
-        const list = Array.isArray(data) ? data : [];
-        setLeads(list);
-        setSelectedLeadId(list[0]?.id || null);
-      }
-
-      if (groupsResponse.ok) {
-        const data = await groupsResponse.json();
-        setGroups(Array.isArray(data) ? data : []);
+      if (!list.length && !syncAttempted) {
+        await syncContacts(true);
       }
     } catch (err) {
       setError('Erro ao carregar leads');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLeads = async (headers: Record<string, string>) => {
+    const leadsResponse = await fetch('/api/crm/leads', { headers });
+    if (!leadsResponse.ok) {
+      setError('Erro ao carregar leads');
+      return [] as Lead[];
+    }
+
+    const data = await leadsResponse.json();
+    const list = Array.isArray(data) ? data : [];
+    setLeads(list);
+    setSelectedLeadId(list[0]?.id || null);
+    return list as Lead[];
+  };
+
+  const fetchGroups = async (headers: Record<string, string>) => {
+    const groupsResponse = await fetch('/api/whatsapp/groups', { headers });
+    if (!groupsResponse.ok) {
+      setError('Erro ao carregar grupos');
+      return [] as Group[];
+    }
+
+    const data = await groupsResponse.json();
+    const list = Array.isArray(data) ? data : [];
+    setGroups(list as Group[]);
+    return list as Group[];
+  };
+
+  const syncContacts = async (silent?: boolean) => {
+    if (!token) return;
+    setSyncing(true);
+    setSyncAttempted(true);
+
+    try {
+      const response = await fetch('/api/whatsapp/sync-contacts', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao sincronizar contatos');
+      }
+
+      const data = await response.json();
+      if (!silent) {
+        setStatus(`Sincronizados: ${data.created || 0} novo(s)`);
+      }
+
+      await fetchLeads({ Authorization: `Bearer ${token}` });
+    } catch (err) {
+      if (!silent) {
+        setStatus('Erro ao sincronizar contatos');
+      }
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -202,6 +253,14 @@ export default function LeadsPage() {
             </button>
             <button
               type="button"
+              onClick={() => syncContacts()}
+              disabled={syncing}
+              className="rounded-full border border-[#2a3942] bg-[#111b21] px-4 py-2 text-xs text-slate-200 disabled:opacity-50"
+            >
+              {syncing ? 'Sincronizando...' : 'Sincronizar contatos'}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditPipeline((prev) => !prev)}
               className="rounded-full border border-[#2a3942] bg-[#111b21] px-4 py-2 text-xs text-slate-200"
             >
@@ -209,6 +268,12 @@ export default function LeadsPage() {
             </button>
           </div>
         </div>
+
+        {status && (
+          <div className="mb-4 rounded-xl border border-[#2a3942] bg-[#111b21] p-3 text-xs text-slate-200">
+            {status}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-xl border border-rose-400/60 bg-rose-500/20 p-3 text-rose-100">
