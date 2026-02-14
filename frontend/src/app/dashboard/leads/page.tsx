@@ -15,6 +15,7 @@ type Lead = {
   tags?: { tag: { name: string } }[];
   lastMessage?: string | null;
   lastMessageAt?: string | null;
+  jid?: string | null;
 };
 
 type Group = {
@@ -28,6 +29,14 @@ type ChatMessage = {
   from: 'lead' | 'me';
   text: string;
   timestamp: string;
+};
+
+type ConversationTarget = {
+  type: 'contact' | 'group';
+  id: string;
+  name: string;
+  phoneNumber?: string | null;
+  jid?: string | null;
 };
 
 const stageDefaults = ['Novo', 'Qualificando', 'Proposta', 'Fechado', 'Perdido'];
@@ -51,6 +60,7 @@ export default function LeadsPage() {
   const [syncAttempted, setSyncAttempted] = useState(false);
   const [activeTab, setActiveTab] = useState<'contatos' | 'grupos'>('contatos');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<ConversationTarget | null>(null);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -59,7 +69,7 @@ export default function LeadsPage() {
   const [pipeline, setPipeline] = useState(stageDefaults);
   const [editPipeline, setEditPipeline] = useState(false);
   const [messageInput, setMessageInput] = useState('');
-  const [messagesByLead, setMessagesByLead] = useState<Record<string, ChatMessage[]>>({});
+  const [messagesByTarget, setMessagesByTarget] = useState<Record<string, ChatMessage[]>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -85,17 +95,65 @@ export default function LeadsPage() {
   };
 
   const fetchLeads = async (headers: Record<string, string>) => {
-    const leadsResponse = await fetch('/api/crm/leads', { headers });
-    if (!leadsResponse.ok) {
-      setError('Erro ao carregar leads');
+    const [contactsResponse, leadsResponse] = await Promise.all([
+      fetch('/api/whatsapp/contacts', { headers }),
+      fetch('/api/crm/leads', { headers }),
+    ]);
+
+    if (!contactsResponse.ok) {
+      setError('Erro ao carregar contatos do WhatsApp');
       return [] as Lead[];
     }
 
-    const data = await leadsResponse.json();
-    const list = Array.isArray(data) ? data : [];
-    setLeads(list);
-    setSelectedLeadId(list[0]?.id || null);
-    return list as Lead[];
+    const contactsData = await contactsResponse.json();
+    const contactsList = Array.isArray(contactsData) ? contactsData : [];
+
+    const leadsData = leadsResponse.ok ? await leadsResponse.json() : [];
+    const leadsList = Array.isArray(leadsData) ? leadsData : [];
+    const leadsByPhone = new Map<string, Lead>();
+    leadsList.forEach((lead: Lead) => {
+      if (lead.phoneNumber) {
+        leadsByPhone.set(lead.phoneNumber, lead);
+      }
+    });
+
+    const merged: Lead[] = contactsList.map((contact: any) => {
+      const leadMatch = contact.phoneNumber ? leadsByPhone.get(contact.phoneNumber) : undefined;
+      return {
+        id: leadMatch?.id || contact.id,
+        name: leadMatch?.name || contact.name || contact.phoneNumber || 'Contato',
+        phoneNumber: leadMatch?.phoneNumber || contact.phoneNumber,
+        email: leadMatch?.email || null,
+        pipelineStage: leadMatch?.pipelineStage || 'Novo',
+        optIn: leadMatch?.optIn ?? true,
+        origin: leadMatch?.origin || null,
+        responsibleUser: leadMatch?.responsibleUser || null,
+        tags: leadMatch?.tags || [],
+        jid: contact.jid || contact.id || null,
+        lastMessage: leadMatch?.lastMessage || null,
+        lastMessageAt: leadMatch?.lastMessageAt || null,
+      };
+    });
+
+    leadsList.forEach((lead: Lead) => {
+      if (!lead.phoneNumber) return;
+      if (!merged.some((item) => item.phoneNumber === lead.phoneNumber)) {
+        merged.push({ ...lead, pipelineStage: lead.pipelineStage || 'Novo' });
+      }
+    });
+
+    setLeads(merged);
+    if (merged.length) {
+      setSelectedLeadId(merged[0].id);
+      setSelectedTarget({
+        type: 'contact',
+        id: merged[0].id,
+        name: merged[0].name,
+        phoneNumber: merged[0].phoneNumber,
+        jid: merged[0].jid,
+      });
+    }
+    return merged as Lead[];
   };
 
   const fetchGroups = async (headers: Record<string, string>) => {
@@ -166,31 +224,56 @@ export default function LeadsPage() {
   }, [leads, search, stageFilter, tagFilter, tagsByLead]);
 
   const selectedLead = useMemo(() => {
+    if (selectedTarget?.type !== 'contact') return null;
     return leads.find((lead) => lead.id === selectedLeadId) || null;
-  }, [leads, selectedLeadId]);
+  }, [leads, selectedLeadId, selectedTarget]);
 
   const chatMessages = useMemo(() => {
-    if (!selectedLead) return [];
-    return messagesByLead[selectedLead.id] || [];
-  }, [messagesByLead, selectedLead]);
+    if (!selectedTarget) return [];
+    const key = `${selectedTarget.type}:${selectedTarget.id}`;
+    return messagesByTarget[key] || [];
+  }, [messagesByTarget, selectedTarget]);
 
   const stageOptions = useMemo(() => {
     return pipeline.length ? pipeline : stageDefaults;
   }, [pipeline]);
 
-  const handleSendMessage = () => {
-    if (!selectedLead || !messageInput.trim()) return;
+  const handleSendMessage = async () => {
+    if (!selectedTarget || !messageInput.trim() || !token) return;
+    const text = messageInput.trim();
     const newMessage: ChatMessage = {
-      id: `${selectedLead.id}-${Date.now()}`,
+      id: `${selectedTarget.id}-${Date.now()}`,
       from: 'me',
-      text: messageInput.trim(),
+      text,
       timestamp: new Date().toISOString(),
     };
-    setMessagesByLead((prev) => ({
+    const key = `${selectedTarget.type}:${selectedTarget.id}`;
+    setMessagesByTarget((prev) => ({
       ...prev,
-      [selectedLead.id]: [...(prev[selectedLead.id] || []), newMessage],
+      [key]: [...(prev[key] || []), newMessage],
     }));
     setMessageInput('');
+
+    try {
+      const targetValue =
+        selectedTarget.type === 'group'
+          ? selectedTarget.id
+          : selectedTarget.jid || selectedTarget.phoneNumber || selectedTarget.id;
+      const response = await fetch('/api/whatsapp/send-text', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ to: targetValue, text }),
+      });
+
+      if (!response.ok) {
+        setStatus('Nao foi possivel enviar a mensagem');
+      }
+    } catch (err) {
+      setStatus('Erro ao enviar mensagem');
+    }
   };
 
   const handleAddTag = (value: string) => {
@@ -383,12 +466,27 @@ export default function LeadsPage() {
                   {groups.length === 0 ? 'Nenhum grupo sincronizado.' : ''}
                   <div className="space-y-3">
                     {groups.map((group) => (
-                      <div key={group.id} className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedTarget({
+                            type: 'group',
+                            id: group.id,
+                            name: group.name,
+                          })
+                        }
+                        className={`w-full text-left rounded-xl border border-[#202c33] bg-[#0b141a] p-3 transition ${
+                          selectedTarget?.type === 'group' && selectedTarget.id === group.id
+                            ? 'bg-[#202c33]'
+                            : 'hover:bg-[#1f2a30]'
+                        }`}
+                      >
                         <p className="text-sm font-semibold text-white">{group.name}</p>
                         <p className="text-xs text-slate-400">
                           {group.participantCount} participantes
                         </p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -407,7 +505,16 @@ export default function LeadsPage() {
                       <button
                         key={lead.id}
                         type="button"
-                        onClick={() => setSelectedLeadId(lead.id)}
+                        onClick={() => {
+                          setSelectedLeadId(lead.id);
+                          setSelectedTarget({
+                            type: 'contact',
+                            id: lead.id,
+                            name: lead.name,
+                            phoneNumber: lead.phoneNumber,
+                            jid: lead.jid,
+                          });
+                        }}
                         className={`w-full text-left px-4 py-3 transition ${
                           selectedLeadId === lead.id ? 'bg-[#202c33]' : 'hover:bg-[#1f2a30]'
                         }`}
@@ -456,14 +563,16 @@ export default function LeadsPage() {
 
           <div className="bg-[#0b141a] text-white flex flex-col">
             <div className="flex items-center justify-between border-b border-[#202c33] px-4 py-3">
-              {selectedLead ? (
+              {selectedTarget ? (
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 rounded-full bg-[#2a3942] flex items-center justify-center text-sm font-semibold">
-                    {selectedLead.name?.slice(0, 2).toUpperCase()}
+                    {selectedTarget.name?.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold">{selectedLead.name}</p>
-                    <p className="text-[11px] text-slate-400">Online agora</p>
+                    <p className="text-sm font-semibold">{selectedTarget.name}</p>
+                    <p className="text-[11px] text-slate-400">
+                      {selectedTarget.type === 'group' ? 'Grupo' : 'Online agora'}
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -476,7 +585,7 @@ export default function LeadsPage() {
             </div>
 
             <div className="wa-chat-bg flex-1 p-6 space-y-4 overflow-auto">
-              {selectedLead && chatMessages.length === 0 && (
+              {selectedTarget && chatMessages.length === 0 && (
                 <p className="text-sm text-slate-400">Nenhuma mensagem ainda.</p>
               )}
               {chatMessages.map((message) => (
@@ -630,6 +739,17 @@ export default function LeadsPage() {
                     </div>
                   </div>
                 </>
+              ) : selectedTarget?.type === 'group' ? (
+                <div className="space-y-3 text-sm text-slate-300">
+                  <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
+                    <p className="text-xs text-slate-400">Tipo</p>
+                    <p>Grupo</p>
+                  </div>
+                  <div className="rounded-xl border border-[#202c33] bg-[#0b141a] p-3">
+                    <p className="text-xs text-slate-400">Nome</p>
+                    <p>{selectedTarget.name}</p>
+                  </div>
+                </div>
               ) : (
                 <p className="text-sm text-slate-400">Selecione um lead para ver detalhes.</p>
               )}
