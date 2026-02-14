@@ -1090,8 +1090,8 @@ export class WhatsAppService {
       return;
     }
 
-    const hashes = options.map((option) => sha256(Buffer.from(option)).toString());
-    const matchedIndex = hashes.findIndex((hash) => selectedOptions.includes(hash));
+    const hashes = options.map((option: string) => sha256(Buffer.from(option)).toString());
+    const matchedIndex = hashes.findIndex((hash: string) => selectedOptions.includes(hash));
 
     if (matchedIndex < 0) {
       return;
