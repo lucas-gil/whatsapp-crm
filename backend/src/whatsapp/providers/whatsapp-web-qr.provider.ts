@@ -249,6 +249,20 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       socket.ev.on('messages.upsert', async (m) => {
         const message = m.messages[0];
         if (!message.key.fromMe && m.type === 'notify') {
+          const pollUpdate = message.message?.pollUpdateMessage;
+          if (pollUpdate) {
+            const selectedOptions = (pollUpdate.vote?.selectedOptions || []).map((opt: any) =>
+              opt?.toString ? opt.toString() : String(opt),
+            );
+            this.emitEvent(workspaceId, 'poll_update', {
+              from: message.key.remoteJid,
+              pollMessageId: pollUpdate.pollCreationMessageKey?.id,
+              selectedOptions,
+              timestamp: message.messageTimestamp,
+            });
+            return;
+          }
+
           this.emitEvent(workspaceId, 'message_received', {
             from: message.key.remoteJid,
             messageId: message.key.id,

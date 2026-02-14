@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { sha256 } from '@whiskeysockets/baileys';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -501,6 +502,23 @@ export class WhatsAppService {
         this.handleMessageSent(workspaceId, payload);
       },
     );
+
+    // Poll update
+    this.defaultProvider.on(
+      workspaceId,
+      'poll_update',
+      (payload: any) => {
+        const key = `${workspaceId}:poll_update`;
+        this.eventCallbacks.get(key)?.forEach((callback) => {
+          try {
+            callback(payload);
+          } catch (error) {
+            this.logger.error(`Erro ao executar callback de poll_update:`, error);
+          }
+        });
+        this.handlePollUpdate(workspaceId, payload);
+      },
+    );
   }
 
   /**
@@ -524,6 +542,9 @@ export class WhatsAppService {
           break;
         case 'message_sent':
           await this.handleMessageSent(workspaceId, payload);
+          break;
+        case 'poll_update':
+          await this.handlePollUpdate(workspaceId, payload);
           break;
       }
     } catch (error) {
@@ -782,6 +803,7 @@ export class WhatsAppService {
     phoneNumber: string,
     text?: string,
     fromJid?: string,
+    pollMessageId?: string,
   ): Promise<void> {
     if (!text) return;
 
@@ -792,14 +814,22 @@ export class WhatsAppService {
       return;
     }
 
-    const recipient = await this.prisma.pollRecipient.findFirst({
-      where: {
-        phoneNumber,
-        status: 'SENT',
-      },
-      orderBy: { sentAt: 'desc' },
-      include: { campaign: true },
-    });
+    const recipient = pollMessageId
+      ? await this.prisma.pollRecipient.findFirst({
+          where: {
+            pollMessageId,
+            status: 'SENT',
+          },
+          include: { campaign: true },
+        })
+      : await this.prisma.pollRecipient.findFirst({
+          where: {
+            phoneNumber,
+            status: 'SENT',
+          },
+          orderBy: { sentAt: 'desc' },
+          include: { campaign: true },
+        });
 
     if (!recipient) return;
 
@@ -1012,6 +1042,68 @@ export class WhatsAppService {
         },
       });
     }
+  }
+
+  private async handlePollUpdate(
+    workspaceId: string,
+    payload: {
+      from?: string;
+      pollMessageId?: string;
+      selectedOptions?: string[];
+      timestamp?: number;
+    },
+  ): Promise<void> {
+    const from = payload.from;
+    const pollMessageId = payload.pollMessageId;
+    const selectedOptions = payload.selectedOptions || [];
+
+    if (!from || !pollMessageId || !selectedOptions.length) {
+      return;
+    }
+
+    this.rememberJid(workspaceId, from);
+    const phoneNumber = this.normalizePhoneNumber(from);
+
+    const recipient = await this.prisma.pollRecipient.findFirst({
+      where: {
+        pollMessageId,
+        status: 'SENT',
+      },
+      include: { campaign: true },
+    });
+
+    if (!recipient) {
+      return;
+    }
+
+    const sections = Array.isArray(recipient.campaign.sections)
+      ? (recipient.campaign.sections as any[])
+      : null;
+
+    const options = sections?.length
+      ? (sections[recipient.flowStep ?? 0]?.options || []).map((option: any) => option.label)
+      : Array.isArray(recipient.campaign.options)
+        ? (recipient.campaign.options as string[])
+        : [];
+
+    if (!options.length) {
+      return;
+    }
+
+    const hashes = options.map((option) => sha256(Buffer.from(option)).toString());
+    const matchedIndex = hashes.findIndex((hash) => selectedOptions.includes(hash));
+
+    if (matchedIndex < 0) {
+      return;
+    }
+
+    await this.handlePollResponse(
+      workspaceId,
+      phoneNumber,
+      String(matchedIndex + 1),
+      from,
+      pollMessageId,
+    );
   }
 
   private isMenuReturnOption(option: string): boolean {
