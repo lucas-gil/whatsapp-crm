@@ -13,6 +13,19 @@ type Lead = {
   tags?: { tag: { name: string } }[];
 };
 
+type Contact = {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  jid?: string | null;
+};
+
+type Group = {
+  id: string;
+  name: string;
+  participantCount: number;
+};
+
 const stageOptions = [
   { value: '', label: 'Todas as etapas' },
   { value: 'novo', label: 'Novo' },
@@ -38,6 +51,11 @@ export default function DisparoCampanhasPage() {
   const [timezone, setTimezone] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<Record<string, boolean>>({});
+  const [selectedGroups, setSelectedGroups] = useState<Record<string, boolean>>({});
+  const [audienceMode, setAudienceMode] = useState<'leads' | 'manual'>('leads');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +71,37 @@ export default function DisparoCampanhasPage() {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     setTimezone(tz || 'America/Sao_Paulo');
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const loadContacts = async () => {
+      try {
+        const [contactsResponse, groupsResponse] = await Promise.all([
+          fetch(`${api}/whatsapp/contacts`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${api}/whatsapp/groups`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (contactsResponse.ok) {
+          const data = await contactsResponse.json();
+          setContacts(Array.isArray(data) ? data : []);
+        }
+
+        if (groupsResponse.ok) {
+          const data = await groupsResponse.json();
+          setGroups(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        setStatus('Erro ao carregar contatos/grupos');
+      }
+    };
+
+    loadContacts();
+  }, [api, token]);
 
   const tagFilter = useMemo(() => {
     return tagsInput
@@ -74,6 +123,16 @@ export default function DisparoCampanhasPage() {
       return true;
     });
   }, [leads, stageFilter, tagFilter]);
+
+  const selectedContactTargets = useMemo(() => {
+    return contacts
+      .filter((contact) => selectedContacts[contact.id])
+      .map((contact) => contact.jid || contact.phoneNumber);
+  }, [contacts, selectedContacts]);
+
+  const selectedGroupTargets = useMemo(() => {
+    return groups.filter((group) => selectedGroups[group.id]).map((group) => group.id);
+  }, [groups, selectedGroups]);
 
   const fetchLeads = async (): Promise<Lead[]> => {
     if (!token) {
@@ -203,18 +262,26 @@ export default function DisparoCampanhasPage() {
       return;
     }
 
+    const usingManualSelection = audienceMode === 'manual';
     const currentLeads = leads.length ? leads : await fetchLeads();
-    const targets = currentLeads.filter((lead) => {
-      if (!lead.optIn) return false;
-      if (stageFilter && lead.pipelineStage !== stageFilter) return false;
-      if (tagFilter.length) {
-        const leadTags = (lead.tags || []).map((tag) => tag.tag.name.toLowerCase());
-        return tagFilter.every((tag) => leadTags.includes(tag.toLowerCase()));
-      }
-      return true;
-    });
+    const targets = usingManualSelection
+      ? []
+      : currentLeads.filter((lead) => {
+          if (!lead.optIn) return false;
+          if (stageFilter && lead.pipelineStage !== stageFilter) return false;
+          if (tagFilter.length) {
+            const leadTags = (lead.tags || []).map((tag) => tag.tag.name.toLowerCase());
+            return tagFilter.every((tag) => leadTags.includes(tag.toLowerCase()));
+          }
+          return true;
+        });
 
-    if (!targets.length) {
+    if (usingManualSelection) {
+      if (!selectedContactTargets.length && !selectedGroupTargets.length) {
+        setStatus('Selecione contatos ou grupos para enviar');
+        return;
+      }
+    } else if (!targets.length) {
       setStatus('Nenhum lead encontrado para a segmentacao informada');
       return;
     }
@@ -226,10 +293,15 @@ export default function DisparoCampanhasPage() {
       if (file) {
         const delayMs = Math.max(1, Math.floor(60000 / Math.max(messagesPerMinute, 1)));
 
-        for (const lead of targets) {
+        const manualTargets = usingManualSelection
+          ? [...selectedContactTargets, ...selectedGroupTargets]
+          : [];
+        const sendTargets = usingManualSelection ? manualTargets : targets.map((lead) => lead.phoneNumber);
+
+        for (const target of sendTargets) {
           const formData = new FormData();
           formData.append('file', file);
-          formData.append('to', lead.phoneNumber);
+          formData.append('to', target);
           if (message) {
             formData.append('caption', message);
           }
@@ -249,7 +321,7 @@ export default function DisparoCampanhasPage() {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
 
-        setStatus(`Envio concluido: ${targets.length} contato(s)`);
+        setStatus(`Envio concluido: ${sendTargets.length} contato(s)`);
         return;
       }
 
@@ -279,8 +351,8 @@ export default function DisparoCampanhasPage() {
         body: JSON.stringify({
           name,
           message,
-          tagFilter,
-          stageFilter: stageFilter || undefined,
+          tagFilter: usingManualSelection ? [] : tagFilter,
+          stageFilter: usingManualSelection ? undefined : stageFilter || undefined,
           messagesPerMinute,
           scheduledFor: scheduledForValue || undefined,
           scheduleConfig,
@@ -294,22 +366,64 @@ export default function DisparoCampanhasPage() {
 
       const broadcast = await createResponse.json();
 
-      const recipientsResponse = await fetch(
-        `${api}/broadcasts/${broadcast.id}/recipients`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            phoneNumbers: targets.map((lead) => lead.phoneNumber),
-          }),
-        },
-      );
+      if (usingManualSelection) {
+        if (selectedContactTargets.length) {
+          const recipientsResponse = await fetch(
+            `${api}/broadcasts/${broadcast.id}/recipients`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                phoneNumbers: selectedContactTargets,
+              }),
+            },
+          );
 
-      if (!recipientsResponse.ok) {
-        throw new Error('Falha ao adicionar destinatarios');
+          if (!recipientsResponse.ok) {
+            throw new Error('Falha ao adicionar destinatarios');
+          }
+        }
+
+        if (selectedGroupTargets.length) {
+          const groupResponse = await fetch(
+            `${api}/broadcasts/${broadcast.id}/groups`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                groupIds: selectedGroupTargets,
+              }),
+            },
+          );
+
+          if (!groupResponse.ok) {
+            throw new Error('Falha ao adicionar grupos');
+          }
+        }
+      } else {
+        const recipientsResponse = await fetch(
+          `${api}/broadcasts/${broadcast.id}/recipients`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              phoneNumbers: targets.map((lead) => lead.phoneNumber),
+            }),
+          },
+        );
+
+        if (!recipientsResponse.ok) {
+          throw new Error('Falha ao adicionar destinatarios');
+        }
       }
 
       if (!scheduledForValue) {
@@ -321,7 +435,10 @@ export default function DisparoCampanhasPage() {
         });
       }
 
-      setStatus(`Campanha criada: ${targets.length} contato(s)`);
+      const totalTargets = usingManualSelection
+        ? selectedContactTargets.length + selectedGroupTargets.length
+        : targets.length;
+      setStatus(`Campanha criada: ${totalTargets} contato(s)`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Erro ao criar campanha');
     } finally {
@@ -349,6 +466,33 @@ export default function DisparoCampanhasPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Publico</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setAudienceMode('leads')}
+                className={`px-3 py-2 rounded text-sm border ${
+                  audienceMode === 'leads'
+                    ? 'border-whatsapp text-whatsapp'
+                    : 'border-gray-300 text-gray-600'
+                }`}
+              >
+                Segmentacao (leads)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAudienceMode('manual')}
+                className={`px-3 py-2 rounded text-sm border ${
+                  audienceMode === 'manual'
+                    ? 'border-whatsapp text-whatsapp'
+                    : 'border-gray-300 text-gray-600'
+                }`}
+              >
+                Contatos e grupos
+              </button>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Nome da campanha
@@ -386,7 +530,8 @@ export default function DisparoCampanhasPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {audienceMode === 'leads' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Tags (separadas por virgula)
@@ -414,7 +559,62 @@ export default function DisparoCampanhasPage() {
                 ))}
               </select>
             </div>
-          </div>
+            </div>
+          )}
+
+          {audienceMode === 'manual' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border border-gray-200 rounded p-3">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Contatos</p>
+                <div className="max-h-48 overflow-auto space-y-2">
+                  {contacts.length === 0 ? (
+                    <p className="text-xs text-gray-500">Nenhum contato encontrado.</p>
+                  ) : (
+                    contacts.map((contact) => (
+                      <label key={contact.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedContacts[contact.id]}
+                          onChange={() =>
+                            setSelectedContacts((prev) => ({
+                              ...prev,
+                              [contact.id]: !prev[contact.id],
+                            }))
+                          }
+                        />
+                        <span>{contact.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded p-3">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Grupos</p>
+                <div className="max-h-48 overflow-auto space-y-2">
+                  {groups.length === 0 ? (
+                    <p className="text-xs text-gray-500">Nenhum grupo encontrado.</p>
+                  ) : (
+                    groups.map((group) => (
+                      <label key={group.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedGroups[group.id]}
+                          onChange={() =>
+                            setSelectedGroups((prev) => ({
+                              ...prev,
+                              [group.id]: !prev[group.id],
+                            }))
+                          }
+                        />
+                        <span>{group.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -575,7 +775,9 @@ export default function DisparoCampanhasPage() {
               Sincronizar contatos
             </button>
             <span className="text-sm text-gray-600">
-              Contatos encontrados: {filteredLeads.length}
+              {audienceMode === 'manual'
+                ? `Selecionados: ${selectedContactTargets.length + selectedGroupTargets.length}`
+                : `Contatos encontrados: ${filteredLeads.length}`}
             </span>
           </div>
 
