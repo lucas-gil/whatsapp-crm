@@ -526,6 +526,19 @@ export default function LeadsPage() {
 
     const text = messageInput.trim();
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
+    const targetValue =
+      selectedTarget.type === 'group'
+        ? selectedTarget.jid || selectedTarget.id
+        : selectedTarget.jid || selectedTarget.phoneNumber || '';
+
+    const isValidTarget =
+      targetValue.includes('@') || /^\d{8,}$/.test(targetValue);
+
+    if (!isValidTarget) {
+      setStatus('Contato sem numero do WhatsApp para envio');
+      return;
+    }
+
     const optimisticText = messageFile
       ? text || `[Arquivo] ${messageFile.name}`
       : text;
@@ -545,11 +558,6 @@ export default function LeadsPage() {
     setSending(true);
 
     try {
-      const targetValue =
-        selectedTarget.type === 'group'
-          ? selectedTarget.jid || selectedTarget.id
-          : selectedTarget.jid || selectedTarget.phoneNumber || selectedTarget.id;
-
       if (messageFile) {
         const formData = new FormData();
         formData.append('file', messageFile);
