@@ -50,7 +50,20 @@ export class ConversationsService {
     });
   }
 
-  async markAsRead(conversationId: string) {
+  async markAsRead(workspaceId: string, conversationId: string) {
+    await this.prisma.message.updateMany({
+      where: {
+        workspaceId,
+        conversationId,
+        direction: 'INCOMING',
+        status: { not: 'READ' },
+      },
+      data: {
+        status: 'READ',
+        updatedAt: new Date(),
+      },
+    });
+
     return this.prisma.conversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },

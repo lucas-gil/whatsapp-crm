@@ -43,8 +43,8 @@ export class ConversationsController {
   }
 
   @Put(':id/read')
-  async markAsRead(@Param('id') id: string) {
-    return this.conversationsService.markAsRead(id);
+  async markAsRead(@Param('id') id: string, @Request() req: any) {
+    return this.conversationsService.markAsRead(req.user.workspaceId, id);
   }
 
   @Put(':id/archive')

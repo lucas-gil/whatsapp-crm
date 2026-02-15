@@ -636,7 +636,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
     }
     try {
-      return await socket.profilePictureUrl(phoneNumber);
+      const target =
+        phoneNumber === 'me' || phoneNumber === 'self'
+          ? socket.user?.id
+          : phoneNumber;
+      if (!target) {
+        return null;
+      }
+      return await socket.profilePictureUrl(target);
     } catch (error) {
       this.logger.error(`Erro ao obter foto do perfil ${phoneNumber}:`, error);
       return null;

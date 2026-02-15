@@ -47,6 +47,7 @@ type Conversation = {
     text?: string | null;
     type: string;
     direction: 'INCOMING' | 'OUTGOING';
+    status?: string;
     createdAt: string;
     attachments?: Array<{ fileName: string }>;
   }>;
@@ -69,6 +70,12 @@ const stageStyles: Record<string, string> = {
   Fechado: 'bg-emerald-100 text-emerald-700',
   Perdido: 'bg-rose-100 text-rose-700',
 };
+
+const emojiList = [
+  '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😎', '🤔', '😴',
+  '😢', '😭', '😡', '👍', '👎', '👏', '🙏', '🔥', '🎉', '❤️',
+  '💚', '💙', '💯', '✨',
+];
 
 export default function LeadsPage() {
   const { token } = useAuth();
@@ -99,6 +106,11 @@ export default function LeadsPage() {
   const [messagesByTarget, setMessagesByTarget] = useState<Record<string, ChatMessage[]>>({});
   const [profilePhotos, setProfilePhotos] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [unreadByLeadId, setUnreadByLeadId] = useState<Record<string, boolean>>({});
+  const [unreadByGroupId, setUnreadByGroupId] = useState<Record<string, boolean>>({});
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selfAvatarUrl, setSelfAvatarUrl] = useState('');
 
   useEffect(() => {
     if (!token) return;
@@ -109,6 +121,7 @@ export default function LeadsPage() {
     try {
       setLoading(true);
       const headers = { Authorization: `Bearer ${token}` };
+      await fetchSelfProfilePicture();
       const list = await fetchLeads(headers);
       await fetchGroups(headers);
       await fetchConversations(headers);
@@ -124,21 +137,40 @@ export default function LeadsPage() {
     }
   };
 
+  const fetchSelfProfilePicture = async () => {
+    if (!token || selfAvatarUrl) return;
+    try {
+      const response = await fetch('/api/whatsapp/profile-picture?to=me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.url) {
+        setSelfAvatarUrl(data.url);
+      }
+    } catch (err) {
+      // Ignore self avatar failures.
+    }
+  };
+
   const fetchLeads = async (headers: Record<string, string>) => {
     const [contactsResponse, leadsResponse] = await Promise.all([
       fetch('/api/whatsapp/contacts', { headers }),
       fetch('/api/crm/leads', { headers }),
     ]);
 
-    if (!contactsResponse.ok) {
+    let contactsList: any[] = [];
+    if (contactsResponse.ok) {
+      const contactsData = await contactsResponse.json();
+      contactsList = Array.isArray(contactsData) ? contactsData : [];
+    } else {
       setError('Erro ao carregar contatos do WhatsApp');
-      return [] as Lead[];
     }
 
-    const contactsData = await contactsResponse.json();
-    const contactsList = Array.isArray(contactsData) ? contactsData : [];
-
     const leadsData = leadsResponse.ok ? await leadsResponse.json() : [];
+    if (!leadsResponse.ok) {
+      setError('Erro ao carregar leads do CRM');
+    }
     const leadsList = Array.isArray(leadsData) ? leadsData : [];
     const leadsByPhone = new Map<string, Lead>();
     leadsList.forEach((lead: Lead) => {
@@ -216,6 +248,8 @@ export default function LeadsPage() {
     const byLead: Record<string, Conversation> = {};
     const byGroup: Record<string, Conversation> = {};
     const byPhone: Record<string, Conversation> = {};
+    const unreadLeads: Record<string, boolean> = {};
+    const unreadGroups: Record<string, boolean> = {};
     list.forEach((conversation: Conversation) => {
       if (conversation.leadId) {
         byLead[conversation.leadId] = conversation;
@@ -226,12 +260,44 @@ export default function LeadsPage() {
       if (conversation.lead?.phoneNumber) {
         byPhone[conversation.lead.phoneNumber] = conversation;
       }
+      const lastMessage = conversation.messages?.[0];
+      const hasUnread =
+        lastMessage?.direction === 'INCOMING' &&
+        lastMessage?.status !== 'READ';
+      if (conversation.leadId) {
+        unreadLeads[conversation.leadId] = hasUnread;
+      }
+      if (conversation.groupId) {
+        unreadGroups[conversation.groupId] = hasUnread;
+      }
     });
     setConversationsByLeadId(byLead);
     setConversationsByGroupId(byGroup);
     setConversationsByPhone(byPhone);
+    setUnreadByLeadId(unreadLeads);
+    setUnreadByGroupId(unreadGroups);
 
     return list as Conversation[];
+  };
+
+  const markConversationRead = async (
+    conversationId: string,
+    target: ConversationTarget,
+  ) => {
+    if (!token) return;
+    try {
+      await fetch(`/api/crm/conversations/${conversationId}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (target.type === 'contact') {
+        setUnreadByLeadId((prev) => ({ ...prev, [target.id]: false }));
+      } else {
+        setUnreadByGroupId((prev) => ({ ...prev, [target.id]: false }));
+      }
+    } catch (err) {
+      // Ignore read sync errors.
+    }
   };
 
   const updateLead = async (leadId: string, data: Partial<Lead>) => {
@@ -370,9 +436,15 @@ export default function LeadsPage() {
         ...(tagsByLead[lead.id] || []),
       ].map((tag) => tag.toLowerCase());
       const tagMatch = normalizedTag ? leadTags.some((tag) => tag.includes(normalizedTag)) : true;
-      return stageMatch && searchMatch && tagMatch;
+      const unreadMatch = showUnreadOnly ? !!unreadByLeadId[lead.id] : true;
+      return stageMatch && searchMatch && tagMatch && unreadMatch;
     });
-  }, [leads, search, stageFilter, tagFilter, tagsByLead]);
+  }, [leads, search, stageFilter, tagFilter, tagsByLead, showUnreadOnly, unreadByLeadId]);
+
+  const filteredGroups = useMemo(() => {
+    if (!showUnreadOnly) return groups;
+    return groups.filter((group) => unreadByGroupId[group.id]);
+  }, [groups, showUnreadOnly, unreadByGroupId]);
 
   const selectedLead = useMemo(() => {
     if (selectedTarget?.type !== 'contact') return null;
@@ -524,6 +596,7 @@ export default function LeadsPage() {
       if (conversation?.id) {
         setSelectedConversationId(conversation.id);
         loadConversationMessages(conversation.id, targetKey);
+        markConversationRead(conversation.id, selectedTarget);
       } else {
         setSelectedConversationId(null);
         setMessagesByTarget((prev) => ({ ...prev, [targetKey]: [] }));
@@ -534,12 +607,40 @@ export default function LeadsPage() {
       if (conversation?.id) {
         setSelectedConversationId(conversation.id);
         loadConversationMessages(conversation.id, targetKey);
+        markConversationRead(conversation.id, selectedTarget);
       } else {
         setSelectedConversationId(null);
         setMessagesByTarget((prev) => ({ ...prev, [targetKey]: [] }));
       }
     }
   }, [selectedTarget, conversationsByLeadId, conversationsByGroupId]);
+
+  useEffect(() => {
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    const interval = setInterval(async () => {
+      await fetchConversations(headers);
+      if (selectedConversationId && selectedTarget) {
+        const key = `${selectedTarget.type}:${selectedTarget.id}`;
+        await loadConversationMessages(selectedConversationId, key);
+      }
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, [token, selectedConversationId, selectedTarget]);
+
+  useEffect(() => {
+    if (!token || leads.length === 0) return;
+    leads.slice(0, 12).forEach((lead) => {
+      fetchProfilePicture({
+        type: 'contact',
+        id: lead.id,
+        name: lead.name,
+        phoneNumber: lead.phoneNumber,
+        jid: lead.jid,
+      });
+    });
+  }, [token, leads]);
 
   if (loading) {
     return (
@@ -627,8 +728,12 @@ export default function LeadsPage() {
           <div className="bg-[#111b21] text-white">
             <div className="flex items-center justify-between border-b border-[#202c33] px-4 py-3">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-[#00a884] flex items-center justify-center text-xs font-semibold">
-                  CRM
+                <div className="h-9 w-9 rounded-full bg-[#00a884] flex items-center justify-center text-xs font-semibold overflow-hidden">
+                  {selfAvatarUrl ? (
+                    <img src={selfAvatarUrl} alt="Perfil" className="h-full w-full object-cover" />
+                  ) : (
+                    'CRM'
+                  )}
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Caixa de entrada</p>
@@ -673,7 +778,12 @@ export default function LeadsPage() {
                 </button>
                 <button
                   type="button"
-                  className="px-3 py-1 rounded-full text-[11px] font-semibold border border-[#202c33] text-slate-400"
+                  onClick={() => setShowUnreadOnly((prev) => !prev)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${
+                    showUnreadOnly
+                      ? 'border-[#00a884] text-[#00a884]'
+                      : 'border-[#202c33] text-slate-400'
+                  }`}
                 >
                   Nao lidas
                 </button>
@@ -706,9 +816,9 @@ export default function LeadsPage() {
             <div className="max-h-[calc(100vh-260px)] overflow-auto">
               {activeTab === 'grupos' ? (
                 <div className="p-4 text-sm text-slate-400">
-                  {groups.length === 0 ? 'Nenhum grupo sincronizado.' : ''}
+                  {filteredGroups.length === 0 ? 'Nenhum grupo sincronizado.' : ''}
                   <div className="space-y-3">
-                    {groups.map((group) => (
+                    {filteredGroups.map((group) => (
                       <button
                         key={group.id}
                         type="button"
@@ -729,6 +839,9 @@ export default function LeadsPage() {
                         <p className="text-xs text-slate-400">
                           {group.participantCount} participantes
                         </p>
+                        {unreadByGroupId[group.id] && (
+                          <span className="mt-2 inline-flex h-2 w-2 rounded-full bg-[#00a884]" />
+                        )}
                       </button>
                     ))}
                   </div>
@@ -745,6 +858,7 @@ export default function LeadsPage() {
                     const lastMessageAt = conversation?.lastMessageAt || lead.lastMessageAt;
                     const avatarUrl = profilePhotos[lead.id] || lead.avatarUrl;
                     const stageLabel = lead.pipelineStage || 'Novo';
+                    const hasUnread = unreadByLeadId[lead.id];
                     const tagList = [
                       ...(lead.tags || []).map((item) => item.tag.name),
                       ...(lead.customFields?.tags || []),
@@ -782,14 +896,19 @@ export default function LeadsPage() {
                               {lastMessage}
                             </p>
                           </div>
-                          <span className="text-[10px] text-slate-400">
-                            {lastMessageAt
-                              ? new Date(lastMessageAt).toLocaleTimeString('pt-BR', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : ''}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400">
+                              {lastMessageAt
+                                ? new Date(lastMessageAt).toLocaleTimeString('pt-BR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : ''}
+                            </span>
+                            {hasUnread && (
+                              <span className="mt-1 block h-2 w-2 rounded-full bg-[#00a884] ml-auto" />
+                            )}
+                          </div>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1">
                           <span
@@ -873,7 +992,34 @@ export default function LeadsPage() {
 
             <div className="border-t border-[#202c33] px-4 py-3">
               <div className="flex items-center gap-2">
-                <button type="button" className="text-slate-400">😊</button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="text-slate-400"
+                    onClick={() => setShowEmojiPicker((prev) => !prev)}
+                  >
+                    😊
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-10 left-0 z-10 w-56 rounded-xl border border-[#202c33] bg-[#111b21] p-2 shadow-2xl">
+                      <div className="grid grid-cols-8 gap-1">
+                        {emojiList.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className="rounded-md p-1 text-sm hover:bg-[#202c33]"
+                            onClick={() => {
+                              setMessageInput((prev) => `${prev}${emoji}`);
+                              setShowEmojiPicker(false);
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <label className="text-slate-400 cursor-pointer">
                   📎
                   <input
