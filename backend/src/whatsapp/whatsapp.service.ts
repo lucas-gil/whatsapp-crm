@@ -148,6 +148,8 @@ export class WhatsAppService {
     }
 
     if (lastError) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      this.logger.warn(`Falha ao enviar texto para ${to}: ${message}`);
       throw lastError;
     }
 
@@ -197,6 +199,8 @@ export class WhatsAppService {
     }
 
     if (lastError) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      this.logger.warn(`Falha ao enviar midia para ${to}: ${message}`);
       throw lastError;
     }
 
@@ -247,6 +251,8 @@ export class WhatsAppService {
     }
 
     if (lastError) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      this.logger.warn(`Falha ao enviar enquete para ${to}: ${message}`);
       throw lastError;
     }
 
@@ -1562,10 +1568,13 @@ export class WhatsAppService {
   private buildSendTargets(workspaceId: string, target: string): string[] {
     const resolved = this.resolveTargetJid(workspaceId, target);
     const targets = new Set([resolved]);
-    const numeric = this.normalizePhoneNumber(resolved);
+    const numeric = this.normalizePhoneNumber(resolved || target);
 
-    if (!resolved.includes('@lid') && numeric.length >= 15) {
-      targets.add(`${numeric}@lid`);
+    if (numeric) {
+      targets.add(`${numeric}@s.whatsapp.net`);
+      if (numeric.length >= 15) {
+        targets.add(`${numeric}@lid`);
+      }
     }
 
     return Array.from(targets);
