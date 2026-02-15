@@ -312,6 +312,30 @@ export default function EntregasPage() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    if (!token) return;
+    const confirmed = window.confirm('Remover este produto? Isso apaga itens e movimentos ligados.');
+    if (!confirmed) return;
+    setStatus('');
+    try {
+      const response = await fetch(`/api/crm/products/${productId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao remover produto');
+      }
+
+      await loadData();
+      setStatus('Produto removido');
+    } catch (err) {
+      setStatus('Erro ao remover produto');
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId: string, statusValue: string) => {
     if (!token) return;
     try {
@@ -402,7 +426,7 @@ export default function EntregasPage() {
                       key={product.id}
                       className="rounded-xl border border-white/10 bg-slate-950/40 p-3"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-semibold">{product.name}</p>
                           <p className="text-xs text-white/60">SKU: {product.sku || 'sem SKU'}</p>
@@ -419,6 +443,13 @@ export default function EntregasPage() {
                               <p>Minimo: {minStock}</p>
                             </>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduct(product.id)}
+                            className="mt-2 text-xs text-rose-200 hover:text-rose-100"
+                          >
+                            Remover
+                          </button>
                         </div>
                       </div>
                       {isDigital && product.digitalUrl && (
