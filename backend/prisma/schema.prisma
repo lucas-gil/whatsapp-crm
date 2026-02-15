@@ -367,6 +367,11 @@ enum StockMovementType {
   ADJUST
 }
 
+enum ProductType {
+  PHYSICAL
+  DIGITAL
+}
+
 model Product {
   id              String      @id @default(cuid())
   workspaceId     String
@@ -376,6 +381,8 @@ model Product {
   sku             String?
   description     String?
   unitPrice       Float       @default(0)
+  productType     ProductType @default(PHYSICAL)
+  digitalUrl      String?
   isActive        Boolean     @default(true)
 
   createdAt       DateTime    @default(now())

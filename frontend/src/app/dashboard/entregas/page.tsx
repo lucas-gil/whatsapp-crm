@@ -8,6 +8,9 @@ type Product = {
   name: string;
   sku?: string | null;
   unitPrice?: number | null;
+  productType?: 'PHYSICAL' | 'DIGITAL';
+  digitalUrl?: string | null;
+  description?: string | null;
 };
 
 type InventoryItem = {
@@ -22,6 +25,20 @@ type Lead = {
   id: string;
   name: string;
   phoneNumber?: string | null;
+};
+
+type WhatsAppContact = {
+  id: string;
+  name?: string | null;
+  phoneNumber?: string | null;
+  jid?: string | null;
+};
+
+type WhatsAppGroup = {
+  id: string;
+  name: string;
+  participantCount: number;
+  whatsappGroupId?: string | null;
 };
 
 type OrderItem = {
@@ -77,12 +94,19 @@ export default function EntregasPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [contacts, setContacts] = useState<WhatsAppContact[]>([]);
+  const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
+  const [waTab, setWaTab] = useState<'contatos' | 'grupos'>('contatos');
+  const [waSearch, setWaSearch] = useState('');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
 
   const [newProduct, setNewProduct] = useState({
     name: '',
     sku: '',
+    description: '',
+    productType: 'PHYSICAL',
+    digitalUrl: '',
     unitPrice: '',
     initialStock: '',
     minStock: '',
@@ -98,6 +122,7 @@ export default function EntregasPage() {
     leadId: '',
     phoneNumber: '',
     notes: '',
+    sendMessage: true,
     items: [{ productId: '', quantity: 1 }],
   });
 
@@ -110,11 +135,13 @@ export default function EntregasPage() {
     try {
       setLoading(true);
       const headers = { Authorization: `Bearer ${token}` };
-      const [productsRes, inventoryRes, ordersRes, leadsRes] = await Promise.all([
+      const [productsRes, inventoryRes, ordersRes, leadsRes, contactsRes, groupsRes] = await Promise.all([
         fetch('/api/crm/products', { headers }),
         fetch('/api/crm/inventory', { headers }),
         fetch('/api/crm/orders', { headers }),
         fetch('/api/crm/leads', { headers }),
+        fetch('/api/whatsapp/contacts', { headers }),
+        fetch('/api/whatsapp/groups', { headers }),
       ]);
 
       if (productsRes.ok) {
@@ -129,6 +156,14 @@ export default function EntregasPage() {
       if (leadsRes.ok) {
         setLeads(await leadsRes.json());
       }
+      if (contactsRes.ok) {
+        const data = await contactsRes.json();
+        setContacts(Array.isArray(data) ? data : []);
+      }
+      if (groupsRes.ok) {
+        const data = await groupsRes.json();
+        setGroups(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
       setError('Erro ao carregar dados de entrega');
     } finally {
@@ -141,6 +176,26 @@ export default function EntregasPage() {
     inventory.forEach((item) => map.set(item.product.id, item));
     return map;
   }, [inventory]);
+
+  const filteredContacts = useMemo(() => {
+    const search = waSearch.trim().toLowerCase();
+    if (!search) return contacts;
+    return contacts.filter((contact) =>
+      [contact.name, contact.phoneNumber]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(search),
+    );
+  }, [contacts, waSearch]);
+
+  const filteredGroups = useMemo(() => {
+    const search = waSearch.trim().toLowerCase();
+    if (!search) return groups;
+    return groups.filter((group) =>
+      String(group.name || '').toLowerCase().includes(search),
+    );
+  }, [groups, waSearch]);
 
   const handleCreateProduct = async () => {
     if (!token || !newProduct.name.trim()) return;
@@ -155,9 +210,18 @@ export default function EntregasPage() {
         body: JSON.stringify({
           name: newProduct.name,
           sku: newProduct.sku || null,
+          description: newProduct.description || null,
+          productType: newProduct.productType,
+          digitalUrl: newProduct.digitalUrl || null,
           unitPrice: Number(newProduct.unitPrice) || 0,
-          initialStock: Number(newProduct.initialStock) || 0,
-          minStock: Number(newProduct.minStock) || 0,
+          initialStock:
+            newProduct.productType === 'PHYSICAL'
+              ? Number(newProduct.initialStock) || 0
+              : 0,
+          minStock:
+            newProduct.productType === 'PHYSICAL'
+              ? Number(newProduct.minStock) || 0
+              : 0,
         }),
       });
 
@@ -165,7 +229,16 @@ export default function EntregasPage() {
         throw new Error('Falha ao criar produto');
       }
 
-      setNewProduct({ name: '', sku: '', unitPrice: '', initialStock: '', minStock: '' });
+      setNewProduct({
+        name: '',
+        sku: '',
+        description: '',
+        productType: 'PHYSICAL',
+        digitalUrl: '',
+        unitPrice: '',
+        initialStock: '',
+        minStock: '',
+      });
       await loadData();
       setStatus('Produto criado');
     } catch (err) {
@@ -216,6 +289,7 @@ export default function EntregasPage() {
           leadId: newOrder.leadId || null,
           phoneNumber: newOrder.phoneNumber || null,
           notes: newOrder.notes || null,
+          sendMessage: newOrder.sendMessage !== false,
           items: newOrder.items,
         }),
       });
@@ -224,7 +298,13 @@ export default function EntregasPage() {
         throw new Error('Falha ao criar pedido');
       }
 
-      setNewOrder({ leadId: '', phoneNumber: '', notes: '', items: [{ productId: '', quantity: 1 }] });
+      setNewOrder({
+        leadId: '',
+        phoneNumber: '',
+        notes: '',
+        sendMessage: true,
+        items: [{ productId: '', quantity: 1 }],
+      });
       await loadData();
       setStatus('Pedido criado');
     } catch (err) {
@@ -316,6 +396,7 @@ export default function EntregasPage() {
                   const stock = inventoryByProduct.get(product.id);
                   const quantity = stock?.quantity ?? 0;
                   const minStock = stock?.minStock ?? 0;
+                  const isDigital = product.productType === 'DIGITAL';
                   return (
                     <div
                       key={product.id}
@@ -325,12 +406,26 @@ export default function EntregasPage() {
                         <div>
                           <p className="font-semibold">{product.name}</p>
                           <p className="text-xs text-white/60">SKU: {product.sku || 'sem SKU'}</p>
+                          <p className="text-xs text-white/50">
+                            {isDigital ? 'Produto digital' : 'Produto fisico'}
+                          </p>
                         </div>
                         <div className="text-right text-xs text-emerald-200">
-                          <p>Estoque: {quantity}</p>
-                          <p>Minimo: {minStock}</p>
+                          {isDigital ? (
+                            <p>Entrega: link digital</p>
+                          ) : (
+                            <>
+                              <p>Estoque: {quantity}</p>
+                              <p>Minimo: {minStock}</p>
+                            </>
+                          )}
                         </div>
                       </div>
+                      {isDigital && product.digitalUrl && (
+                        <p className="mt-2 text-xs text-emerald-100/80 break-all">
+                          Link: {product.digitalUrl}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -352,24 +447,59 @@ export default function EntregasPage() {
                   placeholder="SKU"
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
                 />
+                <select
+                  value={newProduct.productType}
+                  onChange={(event) =>
+                    setNewProduct({ ...newProduct, productType: event.target.value })
+                  }
+                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+                >
+                  <option value="PHYSICAL">Produto fisico</option>
+                  <option value="DIGITAL">Produto digital</option>
+                </select>
+                <input
+                  value={newProduct.description}
+                  onChange={(event) =>
+                    setNewProduct({ ...newProduct, description: event.target.value })
+                  }
+                  placeholder="Descricao"
+                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+                />
                 <input
                   value={newProduct.unitPrice}
                   onChange={(event) => setNewProduct({ ...newProduct, unitPrice: event.target.value })}
                   placeholder="Preco"
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
                 />
-                <input
-                  value={newProduct.initialStock}
-                  onChange={(event) => setNewProduct({ ...newProduct, initialStock: event.target.value })}
-                  placeholder="Estoque inicial"
-                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
-                />
-                <input
-                  value={newProduct.minStock}
-                  onChange={(event) => setNewProduct({ ...newProduct, minStock: event.target.value })}
-                  placeholder="Estoque minimo"
-                  className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
-                />
+                {newProduct.productType === 'PHYSICAL' ? (
+                  <>
+                    <input
+                      value={newProduct.initialStock}
+                      onChange={(event) =>
+                        setNewProduct({ ...newProduct, initialStock: event.target.value })
+                      }
+                      placeholder="Estoque inicial"
+                      className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={newProduct.minStock}
+                      onChange={(event) =>
+                        setNewProduct({ ...newProduct, minStock: event.target.value })
+                      }
+                      placeholder="Estoque minimo"
+                      className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+                    />
+                  </>
+                ) : (
+                  <input
+                    value={newProduct.digitalUrl}
+                    onChange={(event) =>
+                      setNewProduct({ ...newProduct, digitalUrl: event.target.value })
+                    }
+                    placeholder="Link do produto digital"
+                    className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+                  />
+                )}
               </div>
               <button
                 type="button"
@@ -391,7 +521,9 @@ export default function EntregasPage() {
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
                 >
                   <option value="">Selecione o produto</option>
-                  {products.map((product) => (
+                  {products
+                    .filter((product) => product.productType !== 'DIGITAL')
+                    .map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name}
                     </option>
@@ -422,6 +554,100 @@ export default function EntregasPage() {
 
           <div className="space-y-6">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <h2 className="text-sm font-semibold">WhatsApp conectado</h2>
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setWaTab('contatos')}
+                  className={`rounded-full px-3 py-1 border ${
+                    waTab === 'contatos'
+                      ? 'border-emerald-400 text-emerald-200'
+                      : 'border-white/10 text-white/60'
+                  }`}
+                >
+                  Contatos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaTab('grupos')}
+                  className={`rounded-full px-3 py-1 border ${
+                    waTab === 'grupos'
+                      ? 'border-emerald-400 text-emerald-200'
+                      : 'border-white/10 text-white/60'
+                  }`}
+                >
+                  Grupos
+                </button>
+              </div>
+              <input
+                value={waSearch}
+                onChange={(event) => setWaSearch(event.target.value)}
+                placeholder="Buscar no WhatsApp"
+                className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
+              />
+              <div className="mt-3 max-h-48 space-y-2 overflow-auto text-xs">
+                {waTab === 'contatos' && (
+                  <>
+                    {filteredContacts.length === 0 && (
+                      <p className="text-white/50">Nenhum contato encontrado.</p>
+                    )}
+                    {filteredContacts.map((contact) => (
+                      <button
+                        key={contact.id}
+                        type="button"
+                        onClick={() =>
+                          setNewOrder({
+                            ...newOrder,
+                            phoneNumber: contact.phoneNumber || '',
+                            leadId: '',
+                            sendMessage: true,
+                          })
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-left"
+                      >
+                        <p className="text-white">
+                          {contact.name || contact.phoneNumber || 'Sem nome'}
+                        </p>
+                        <p className="text-white/60">{contact.phoneNumber || 'Sem numero'}</p>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {waTab === 'grupos' && (
+                  <>
+                    {filteredGroups.length === 0 && (
+                      <p className="text-white/50">Nenhum grupo encontrado.</p>
+                    )}
+                    {filteredGroups.map((group) => (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() =>
+                          setNewOrder({
+                            ...newOrder,
+                            phoneNumber: '',
+                            leadId: '',
+                            sendMessage: false,
+                            notes: `Pedido vinculado ao grupo: ${group.name}`,
+                          })
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-left"
+                      >
+                        <p className="text-white">{group.name}</p>
+                        <p className="text-white/60">
+                          {group.participantCount} participantes
+                        </p>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+              <p className="mt-2 text-[11px] text-white/50">
+                Se voce selecionar um grupo, a notificacao automatica fica desativada.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <h2 className="text-sm font-semibold">Criar pedido</h2>
               <div className="mt-3 grid gap-3">
                 <select
@@ -446,6 +672,17 @@ export default function EntregasPage() {
                   placeholder="Ou telefone do cliente"
                   className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm"
                 />
+                <label className="flex items-center gap-2 text-xs text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={newOrder.sendMessage}
+                    onChange={(event) =>
+                      setNewOrder({ ...newOrder, sendMessage: event.target.checked })
+                    }
+                    className="h-4 w-4"
+                  />
+                  Enviar mensagem automatica no WhatsApp
+                </label>
                 <textarea
                   value={newOrder.notes}
                   onChange={(event) => setNewOrder({ ...newOrder, notes: event.target.value })}

@@ -25,6 +25,10 @@ export class InventoryService {
       throw new NotFoundException('Produto nao encontrado');
     }
 
+    if (product.productType === 'DIGITAL') {
+      throw new BadRequestException('Produto digital nao possui estoque');
+    }
+
     const delta = Number(data.quantity) || 0;
     if (!delta) {
       throw new BadRequestException('quantity deve ser diferente de 0');

@@ -79,13 +79,21 @@ export class OrdersService {
     const productIds = data.items.map((item: any) => item.productId);
     const products = (await this.prisma.product.findMany({
       where: { id: { in: productIds }, workspaceId },
-    })) as Array<{ id: string; unitPrice?: number | null }>;
+    })) as Array<{
+      id: string;
+      unitPrice?: number | null;
+      productType?: string | null;
+      digitalUrl?: string | null;
+    }>;
 
     if (products.length !== productIds.length) {
       throw new BadRequestException('Produto invalido na lista de itens');
     }
 
-    const productMap = new Map<string, { id: string; unitPrice?: number | null }>(
+    const productMap = new Map<
+      string,
+      { id: string; unitPrice?: number | null; productType?: string | null; digitalUrl?: string | null }
+    >(
       products.map((product) => [product.id, product]),
     );
     const items = data.items.map((item: any) => {
@@ -102,8 +110,17 @@ export class OrdersService {
         quantity,
         unitPrice,
         totalPrice,
+        productType: product.productType || 'PHYSICAL',
+        digitalUrl: product.digitalUrl || null,
       };
     });
+
+    const itemsForCreate = items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    }));
 
     const totalAmount = items.reduce(
       (sum: number, item: { totalPrice: number }) => sum + item.totalPrice,
@@ -112,6 +129,9 @@ export class OrdersService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       for (const item of items) {
+        if (item.productType === 'DIGITAL') {
+          continue;
+        }
         const inventory = await tx.inventoryItem.findUnique({
           where: { productId: item.productId },
         });
@@ -127,7 +147,7 @@ export class OrdersService {
           status: data.status || 'NEW',
           totalAmount,
           notes: data.notes || null,
-          items: { create: items },
+          items: { create: itemsForCreate },
         },
         include: {
           lead: true,
@@ -146,6 +166,9 @@ export class OrdersService {
       });
 
       for (const item of items) {
+        if (item.productType === 'DIGITAL') {
+          continue;
+        }
         await tx.inventoryItem.upsert({
           where: { productId: item.productId },
           update: {
@@ -175,7 +198,13 @@ export class OrdersService {
     });
 
     if (data.sendMessage !== false && leadPhone) {
-      const message = `Pedido criado!\nNumero: ${created.id}\nTotal: R$ ${totalAmount.toFixed(2)}`;
+      const digitalLinks = items
+        .filter((item) => item.productType === 'DIGITAL' && item.digitalUrl)
+        .map((item) => `\nAcesso digital: ${item.digitalUrl}`)
+        .join('');
+      const message =
+        `Pedido criado!\nNumero: ${created.id}\nTotal: R$ ${totalAmount.toFixed(2)}` +
+        digitalLinks;
       this.safeSendMessage(workspaceId, leadPhone, message);
     }
 

@@ -19,6 +19,7 @@ export class ProductsService {
     }
 
     const unitPrice = Number(data.unitPrice) || 0;
+    const productType = data.productType === 'DIGITAL' ? 'DIGITAL' : 'PHYSICAL';
     const product = await this.prisma.product.create({
       data: {
         workspaceId,
@@ -26,13 +27,15 @@ export class ProductsService {
         sku: data.sku || null,
         description: data.description || null,
         unitPrice,
+        productType,
+        digitalUrl: data.digitalUrl || null,
         isActive: data.isActive !== false,
       },
     });
 
     const initialStock = Number(data.initialStock) || 0;
     const minStock = Number(data.minStock) || 0;
-    if (initialStock || minStock) {
+    if (productType === 'PHYSICAL' && (initialStock || minStock)) {
       await this.prisma.inventoryItem.create({
         data: {
           workspaceId,
@@ -54,6 +57,7 @@ export class ProductsService {
       throw new NotFoundException('Produto nao encontrado');
     }
 
+    const productType = data.productType ? (data.productType === 'DIGITAL' ? 'DIGITAL' : 'PHYSICAL') : undefined;
     return this.prisma.product.update({
       where: { id: productId },
       data: {
@@ -61,6 +65,8 @@ export class ProductsService {
         sku: data.sku ?? undefined,
         description: data.description ?? undefined,
         unitPrice: data.unitPrice !== undefined ? Number(data.unitPrice) || 0 : undefined,
+        productType,
+        digitalUrl: data.digitalUrl !== undefined ? data.digitalUrl || null : undefined,
         isActive: data.isActive !== undefined ? data.isActive : undefined,
       },
     });
