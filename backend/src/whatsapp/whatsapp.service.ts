@@ -713,7 +713,6 @@ export class WhatsAppService {
               data: {
                 workspaceId,
                 groupId: group.id,
-                leadId: null,
                 lastMessageAt: new Date(timestamp),
                 lastMessage: text || `[${type}]`,
               },
@@ -917,7 +916,6 @@ export class WhatsAppService {
               data: {
                 workspaceId,
                 groupId: group.id,
-                leadId: null,
                 lastMessageAt: new Date(),
                 lastMessage: text || `[${type}]`,
               },
