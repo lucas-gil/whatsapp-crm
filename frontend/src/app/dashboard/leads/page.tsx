@@ -659,6 +659,8 @@ export default function LeadsPage() {
 
   useEffect(() => {
     if (!selectedTarget) return;
+    setIsAtBottom(true);
+    setHasNewMessages(false);
     fetchProfilePicture(selectedTarget);
 
     if (selectedTarget.type === 'contact') {
@@ -694,10 +696,27 @@ export default function LeadsPage() {
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
     const interval = setInterval(async () => {
-      await fetchConversations(headers);
-      if (selectedConversationId && selectedTarget) {
-        const key = `${selectedTarget.type}:${selectedTarget.id}`;
-        await loadConversationMessages(selectedConversationId, key);
+      const refreshed = await fetchConversations(headers);
+      if (!selectedTarget) return;
+
+      const key = `${selectedTarget.type}:${selectedTarget.id}`;
+      if (selectedTarget.type === 'contact') {
+        const convo = refreshed.find(
+          (item) =>
+            item.leadId === selectedTarget.id ||
+            (selectedTarget.phoneNumber && item.lead?.phoneNumber === selectedTarget.phoneNumber),
+        );
+        if (convo?.id) {
+          setSelectedConversationId(convo.id);
+          await loadConversationMessages(convo.id, key);
+        }
+        return;
+      }
+
+      const convo = refreshed.find((item) => item.groupId === selectedTarget.id);
+      if (convo?.id) {
+        setSelectedConversationId(convo.id);
+        await loadConversationMessages(convo.id, key);
       }
     }, 3000);
 
