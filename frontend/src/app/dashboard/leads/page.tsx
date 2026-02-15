@@ -78,6 +78,7 @@ export default function LeadsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsByLeadId, setConversationsByLeadId] = useState<Record<string, Conversation>>({});
   const [conversationsByGroupId, setConversationsByGroupId] = useState<Record<string, Conversation>>({});
+  const [conversationsByPhone, setConversationsByPhone] = useState<Record<string, Conversation>>({});
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -214,6 +215,7 @@ export default function LeadsPage() {
 
     const byLead: Record<string, Conversation> = {};
     const byGroup: Record<string, Conversation> = {};
+    const byPhone: Record<string, Conversation> = {};
     list.forEach((conversation: Conversation) => {
       if (conversation.leadId) {
         byLead[conversation.leadId] = conversation;
@@ -221,9 +223,13 @@ export default function LeadsPage() {
       if (conversation.groupId) {
         byGroup[conversation.groupId] = conversation;
       }
+      if (conversation.lead?.phoneNumber) {
+        byPhone[conversation.lead.phoneNumber] = conversation;
+      }
     });
     setConversationsByLeadId(byLead);
     setConversationsByGroupId(byGroup);
+    setConversationsByPhone(byPhone);
 
     return list as Conversation[];
   };
@@ -274,22 +280,29 @@ export default function LeadsPage() {
 
   const fetchProfilePicture = async (target: ConversationTarget) => {
     if (!token || target.type !== 'contact') return;
-    if (profilePhotos[target.id]) return;
+    if (profilePhotos[target.id] !== undefined) return;
     const value = target.jid || target.phoneNumber;
     if (!value) return;
+    const isValidTarget = value.includes('@') || /^\d{8,}$/.test(value);
+    if (!isValidTarget) return;
 
     try {
       const response = await fetch(
         `/api/whatsapp/profile-picture?to=${encodeURIComponent(value)}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      if (!response.ok) return;
+      if (!response.ok) {
+        setProfilePhotos((prev) => ({ ...prev, [target.id]: '' }));
+        return;
+      }
       const data = await response.json();
       if (data?.url) {
         setProfilePhotos((prev) => ({ ...prev, [target.id]: data.url }));
+      } else {
+        setProfilePhotos((prev) => ({ ...prev, [target.id]: '' }));
       }
     } catch (err) {
-      return;
+      setProfilePhotos((prev) => ({ ...prev, [target.id]: '' }));
     }
   };
 
@@ -502,7 +515,11 @@ export default function LeadsPage() {
     fetchProfilePicture(selectedTarget);
 
     if (selectedTarget.type === 'contact') {
-      const conversation = conversationsByLeadId[selectedTarget.id];
+      const conversation =
+        conversationsByLeadId[selectedTarget.id] ||
+        (selectedTarget.phoneNumber
+          ? conversationsByPhone[selectedTarget.phoneNumber]
+          : undefined);
       const targetKey = `contact:${selectedTarget.id}`;
       if (conversation?.id) {
         setSelectedConversationId(conversation.id);
@@ -910,6 +927,10 @@ export default function LeadsPage() {
                               : lead,
                           ),
                         );
+                        if (selectedLead.id.includes('@')) {
+                          setStatus('Sincronize o contato para salvar etapa.');
+                          return;
+                        }
                         updateLead(selectedLead.id, { pipelineStage: nextStage });
                       }}
                       className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
@@ -966,9 +987,13 @@ export default function LeadsPage() {
                           [selectedLead.id]: event.target.value,
                         }))
                       }
-                      onBlur={(event) =>
-                        updateLead(selectedLead.id, { notes: event.target.value })
-                      }
+                      onBlur={(event) => {
+                        if (selectedLead.id.includes('@')) {
+                          setStatus('Sincronize o contato para salvar notas.');
+                          return;
+                        }
+                        updateLead(selectedLead.id, { notes: event.target.value });
+                      }}
                       placeholder="Escreva observacoes importantes"
                       rows={4}
                       className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
