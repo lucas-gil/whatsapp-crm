@@ -351,6 +351,9 @@ export class WhatsAppService {
     const recentJids = this.recentJids.get(workspaceId) || new Map();
     providerContacts.forEach((contact: any) => {
       if (!contact?.phoneNumber) return;
+      if (contact.id && String(contact.id).includes('@')) {
+        this.rememberJid(workspaceId, String(contact.id));
+      }
       byPhone.set(contact.phoneNumber, contact);
     });
 
@@ -1502,7 +1505,7 @@ export class WhatsAppService {
     }
 
     const numericTarget = target.replace(/\D/g, '');
-    if (numericTarget.length > 15) {
+    if (numericTarget.length >= 15) {
       return `${numericTarget}@lid`;
     }
 
