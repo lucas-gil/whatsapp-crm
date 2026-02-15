@@ -9,7 +9,18 @@ export function useAuth() {
     const initAuth = async () => {
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-        const api = apiBase ? apiBase.replace(/\/$/, '') : '/api';
+        let api = apiBase ? apiBase.replace(/\/$/, '') : '/api';
+
+        if (typeof window !== 'undefined' && apiBase) {
+          try {
+            const apiUrl = new URL(apiBase, window.location.origin);
+            if (apiUrl.host !== window.location.host || apiUrl.hostname === 'localhost') {
+              api = '/api';
+            }
+          } catch (err) {
+            api = '/api';
+          }
+        }
 
         // Verificar se já tem token no localStorage
         const storedToken = localStorage.getItem('authToken');
