@@ -648,6 +648,8 @@ export class WhatsAppService {
 
     try {
       const isGroup = !!from && from.endsWith('@g.us');
+      const messageDate = this.normalizeTimestamp(timestamp);
+
       if (isGroup) {
         const groupJid = from;
         const participantJid = participant || '';
@@ -705,7 +707,7 @@ export class WhatsAppService {
           ? await this.prisma.conversation.update({
               where: { id: existingConversation.id },
               data: {
-                lastMessageAt: new Date(timestamp),
+                lastMessageAt: messageDate,
                 lastMessage: text || `[${type}]`,
               },
             })
@@ -713,7 +715,7 @@ export class WhatsAppService {
               data: {
                 workspaceId,
                 groupId: group.id,
-                lastMessageAt: new Date(timestamp),
+                lastMessageAt: messageDate,
                 lastMessage: text || `[${type}]`,
               },
             });
@@ -730,7 +732,7 @@ export class WhatsAppService {
             senderName:
               senderLead?.name || pushName || participantPhone || normalizedParticipant || null,
             status: 'SENT',
-            createdAt: new Date(timestamp),
+            createdAt: messageDate,
           },
         });
 
@@ -776,7 +778,7 @@ export class WhatsAppService {
         ? await this.prisma.conversation.update({
             where: { id: existingConversation.id },
             data: {
-              lastMessageAt: new Date(timestamp),
+              lastMessageAt: messageDate,
               lastMessage: text || `[${type}]`,
             },
           })
@@ -785,7 +787,7 @@ export class WhatsAppService {
               workspaceId,
               leadId: lead.id,
               groupId: null,
-              lastMessageAt: new Date(timestamp),
+              lastMessageAt: messageDate,
               lastMessage: text || `[${type}]`,
             },
           });
@@ -802,7 +804,7 @@ export class WhatsAppService {
           senderPhoneNumber: phoneNumber,
           senderName: lead.name,
           status: 'SENT',
-          createdAt: new Date(timestamp),
+          createdAt: messageDate,
         },
       });
 
@@ -1438,6 +1440,23 @@ export class WhatsAppService {
 
   private normalizePhoneNumber(jid: string): string {
     return jid.replace(/@s\.whatsapp\.net|@g\.us|@lid/g, '');
+  }
+
+  private normalizeTimestamp(timestamp: any): Date {
+    if (timestamp === null || timestamp === undefined) {
+      return new Date();
+    }
+
+    let value = Number(timestamp);
+    if (!Number.isFinite(value)) {
+      return new Date();
+    }
+
+    if (value > 0 && value < 1_000_000_000_000) {
+      value *= 1000;
+    }
+
+    return new Date(value);
   }
 
   private normalizeJid(jid: string): string {
