@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 type Lead = {
@@ -107,6 +107,7 @@ export default function LeadsPage() {
   const [messagesByTarget, setMessagesByTarget] = useState<Record<string, ChatMessage[]>>({});
   const [profilePhotos, setProfilePhotos] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [unreadByLeadId, setUnreadByLeadId] = useState<Record<string, boolean>>({});
   const [unreadByGroupId, setUnreadByGroupId] = useState<Record<string, boolean>>({});
@@ -328,7 +329,14 @@ export default function LeadsPage() {
     if (!response.ok) return;
     const data = await response.json();
     const messages = Array.isArray(data?.messages) ? data.messages : [];
-    const mapped = messages.map((message: any) => {
+    const mapped = messages
+      .slice()
+      .sort((a: any, b: any) => {
+        const aTime = new Date(a.createdAt || 0).getTime();
+        const bTime = new Date(b.createdAt || 0).getTime();
+        return aTime - bTime;
+      })
+      .map((message: any) => {
       const attachmentLabel = message.attachments?.length
         ? `[Arquivo] ${message.attachments[0]?.fileName || ''}`.trim()
         : null;
@@ -457,6 +465,11 @@ export default function LeadsPage() {
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
     return messagesByTarget[key] || [];
   }, [messagesByTarget, selectedTarget]);
+
+  useEffect(() => {
+    if (!chatMessages.length) return;
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages.length, selectedTarget]);
 
   const stageOptions = useMemo(() => {
     return pipeline.length ? pipeline : stageDefaults;
@@ -990,6 +1003,7 @@ export default function LeadsPage() {
                   </p>
                 </div>
               ))}
+              <div ref={chatEndRef} />
             </div>
 
             <div className="border-t border-[#202c33] px-4 py-3">
