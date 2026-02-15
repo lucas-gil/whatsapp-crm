@@ -96,7 +96,14 @@ export class OrdersService {
     >(
       products.map((product) => [product.id, product]),
     );
-    const items = data.items.map((item: any) => {
+    const items: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+      productType: 'DIGITAL' | 'PHYSICAL';
+      digitalUrl: string | null;
+    }> = data.items.map((item: any) => {
       const product = productMap.get(item.productId);
       const quantity = Number(item.quantity) || 0;
       if (!product || quantity <= 0) {
