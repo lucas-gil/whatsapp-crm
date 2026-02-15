@@ -109,6 +109,9 @@ export default function LeadsPage() {
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastIncomingByTargetRef = useRef<Record<string, string>>({});
+  const initializedTargetsRef = useRef<Set<string>>(new Set());
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
@@ -351,6 +354,40 @@ export default function LeadsPage() {
         timestamp: message.createdAt,
       } as ChatMessage;
     });
+
+    const lastIncoming = [...mapped].reverse().find((item) => item.from === 'lead');
+    if (lastIncoming) {
+      const previous = lastIncomingByTargetRef.current[targetKey];
+      const isInitialized = initializedTargetsRef.current.has(targetKey);
+      if (isInitialized && previous && previous !== lastIncoming.id) {
+        const playSound = true;
+        if (playSound) {
+          try {
+            const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+            if (!audioContextRef.current && AudioContextCtor) {
+              audioContextRef.current = new AudioContextCtor();
+            }
+            const ctx = audioContextRef.current;
+            if (ctx) {
+              const oscillator = ctx.createOscillator();
+              const gainNode = ctx.createGain();
+              gainNode.gain.value = 0.4;
+              oscillator.type = 'sine';
+              oscillator.frequency.value = 880;
+              oscillator.connect(gainNode);
+              gainNode.connect(ctx.destination);
+              oscillator.start();
+              oscillator.stop(ctx.currentTime + 0.16);
+            }
+          } catch (err) {
+            // Ignore audio errors or blocked autoplay.
+          }
+        }
+      }
+      lastIncomingByTargetRef.current[targetKey] = lastIncoming.id;
+      initializedTargetsRef.current.add(targetKey);
+    }
+
     setMessagesByTarget((prev) => ({
       ...prev,
       [targetKey]: mapped,
