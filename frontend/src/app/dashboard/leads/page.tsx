@@ -12,6 +12,9 @@ type Lead = {
   optIn?: boolean | null;
   origin?: string | null;
   responsibleUser?: string | null;
+  notes?: string | null;
+  customFields?: { tags?: string[] } | null;
+  avatarUrl?: string | null;
   tags?: { tag: { name: string } }[];
   lastMessage?: string | null;
   lastMessageAt?: string | null;
@@ -29,6 +32,24 @@ type ChatMessage = {
   from: 'lead' | 'me';
   text: string;
   timestamp: string;
+};
+
+type Conversation = {
+  id: string;
+  leadId?: string | null;
+  groupId?: string | null;
+  lastMessage?: string | null;
+  lastMessageAt?: string | null;
+  lead?: Lead | null;
+  group?: Group | null;
+  messages?: Array<{
+    id: string;
+    text?: string | null;
+    type: string;
+    direction: 'INCOMING' | 'OUTGOING';
+    createdAt: string;
+    attachments?: Array<{ fileName: string }>;
+  }>;
 };
 
 type ConversationTarget = {
@@ -54,6 +75,9 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationsByLeadId, setConversationsByLeadId] = useState<Record<string, Conversation>>({});
+  const [conversationsByGroupId, setConversationsByGroupId] = useState<Record<string, Conversation>>({});
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -61,6 +85,7 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState<'contatos' | 'grupos'>('contatos');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<ConversationTarget | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -69,7 +94,10 @@ export default function LeadsPage() {
   const [pipeline, setPipeline] = useState(stageDefaults);
   const [editPipeline, setEditPipeline] = useState(false);
   const [messageInput, setMessageInput] = useState('');
+  const [messageFile, setMessageFile] = useState<File | null>(null);
   const [messagesByTarget, setMessagesByTarget] = useState<Record<string, ChatMessage[]>>({});
+  const [profilePhotos, setProfilePhotos] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -82,6 +110,7 @@ export default function LeadsPage() {
       const headers = { Authorization: `Bearer ${token}` };
       const list = await fetchLeads(headers);
       await fetchGroups(headers);
+      await fetchConversations(headers);
 
       if (!list.length && !syncAttempted) {
         await syncContacts(true);
@@ -128,6 +157,9 @@ export default function LeadsPage() {
         optIn: leadMatch?.optIn ?? true,
         origin: leadMatch?.origin || null,
         responsibleUser: leadMatch?.responsibleUser || null,
+        notes: leadMatch?.notes || null,
+        customFields: leadMatch?.customFields || null,
+        avatarUrl: leadMatch?.avatarUrl || null,
         tags: leadMatch?.tags || [],
         jid: contact.jid || contact.id || null,
         lastMessage: leadMatch?.lastMessage || null,
@@ -143,6 +175,19 @@ export default function LeadsPage() {
     });
 
     setLeads(merged);
+    const nextTags: Record<string, string[]> = {};
+    const nextNotes: Record<string, string> = {};
+    merged.forEach((lead) => {
+      const storedTags = lead.customFields?.tags || [];
+      if (storedTags.length) {
+        nextTags[lead.id] = storedTags;
+      }
+      if (lead.notes) {
+        nextNotes[lead.id] = lead.notes;
+      }
+    });
+    setTagsByLead(nextTags);
+    setNotesByLead(nextNotes);
     if (merged.length) {
       setSelectedLeadId(merged[0].id);
       setSelectedTarget({
@@ -154,6 +199,98 @@ export default function LeadsPage() {
       });
     }
     return merged as Lead[];
+  };
+
+  const fetchConversations = async (headers: Record<string, string>) => {
+    const response = await fetch('/api/crm/conversations', { headers });
+    if (!response.ok) {
+      setError('Erro ao carregar conversas');
+      return [] as Conversation[];
+    }
+
+    const data = await response.json();
+    const list = Array.isArray(data) ? data : [];
+    setConversations(list as Conversation[]);
+
+    const byLead: Record<string, Conversation> = {};
+    const byGroup: Record<string, Conversation> = {};
+    list.forEach((conversation: Conversation) => {
+      if (conversation.leadId) {
+        byLead[conversation.leadId] = conversation;
+      }
+      if (conversation.groupId) {
+        byGroup[conversation.groupId] = conversation;
+      }
+    });
+    setConversationsByLeadId(byLead);
+    setConversationsByGroupId(byGroup);
+
+    return list as Conversation[];
+  };
+
+  const updateLead = async (leadId: string, data: Partial<Lead>) => {
+    if (!token) return;
+    try {
+      await fetch(`/api/crm/leads/${leadId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+    } catch (err) {
+      setStatus('Nao foi possivel salvar os dados do lead');
+    }
+  };
+
+  const loadConversationMessages = async (
+    conversationId: string,
+    targetKey: string,
+  ) => {
+    if (!token) return;
+    const response = await fetch(`/api/crm/conversations/${conversationId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    const messages = Array.isArray(data?.messages) ? data.messages : [];
+    const mapped = messages.map((message: any) => {
+      const attachmentLabel = message.attachments?.length
+        ? `[Arquivo] ${message.attachments[0]?.fileName || ''}`.trim()
+        : null;
+      return {
+        id: message.id,
+        from: message.direction === 'OUTGOING' ? 'me' : 'lead',
+        text: message.text || attachmentLabel || `[${message.type}]`,
+        timestamp: message.createdAt,
+      } as ChatMessage;
+    });
+    setMessagesByTarget((prev) => ({
+      ...prev,
+      [targetKey]: mapped,
+    }));
+  };
+
+  const fetchProfilePicture = async (target: ConversationTarget) => {
+    if (!token || target.type !== 'contact') return;
+    if (profilePhotos[target.id]) return;
+    const value = target.jid || target.phoneNumber;
+    if (!value) return;
+
+    try {
+      const response = await fetch(
+        `/api/whatsapp/profile-picture?to=${encodeURIComponent(value)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.url) {
+        setProfilePhotos((prev) => ({ ...prev, [target.id]: data.url }));
+      }
+    } catch (err) {
+      return;
+    }
   };
 
   const fetchGroups = async (headers: Record<string, string>) => {
@@ -216,6 +353,7 @@ export default function LeadsPage() {
         : true;
       const leadTags = [
         ...(lead.tags || []).map((item) => item.tag.name),
+        ...(lead.customFields?.tags || []),
         ...(tagsByLead[lead.id] || []),
       ].map((tag) => tag.toLowerCase());
       const tagMatch = normalizedTag ? leadTags.some((tag) => tag.includes(normalizedTag)) : true;
@@ -239,40 +377,87 @@ export default function LeadsPage() {
   }, [pipeline]);
 
   const handleSendMessage = async () => {
-    if (!selectedTarget || !messageInput.trim() || !token) return;
+    if (!selectedTarget || !token) return;
+    if (!messageInput.trim() && !messageFile) return;
+    if (sending) return;
+
     const text = messageInput.trim();
+    const key = `${selectedTarget.type}:${selectedTarget.id}`;
+    const optimisticText = messageFile
+      ? text || `[Arquivo] ${messageFile.name}`
+      : text;
+
     const newMessage: ChatMessage = {
       id: `${selectedTarget.id}-${Date.now()}`,
       from: 'me',
-      text,
+      text: optimisticText,
       timestamp: new Date().toISOString(),
     };
-    const key = `${selectedTarget.type}:${selectedTarget.id}`;
+
     setMessagesByTarget((prev) => ({
       ...prev,
       [key]: [...(prev[key] || []), newMessage],
     }));
     setMessageInput('');
+    setSending(true);
 
     try {
       const targetValue =
         selectedTarget.type === 'group'
           ? selectedTarget.id
           : selectedTarget.jid || selectedTarget.phoneNumber || selectedTarget.id;
-      const response = await fetch('/api/whatsapp/send-text', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ to: targetValue, text }),
-      });
 
-      if (!response.ok) {
-        setStatus('Nao foi possivel enviar a mensagem');
+      if (messageFile) {
+        const formData = new FormData();
+        formData.append('file', messageFile);
+        formData.append('to', targetValue);
+        if (text) {
+          formData.append('caption', text);
+        }
+
+        const response = await fetch('/api/whatsapp/send-media', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          setStatus('Nao foi possivel enviar o arquivo');
+        }
+      } else {
+        const response = await fetch('/api/whatsapp/send-text', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ to: targetValue, text }),
+        });
+
+        if (!response.ok) {
+          setStatus('Nao foi possivel enviar a mensagem');
+        }
+      }
+
+      if (selectedConversationId) {
+        await loadConversationMessages(selectedConversationId, key);
+      }
+
+      if (selectedTarget.type === 'contact') {
+        const refreshed = await fetchConversations({ Authorization: `Bearer ${token}` });
+        const convo = refreshed.find((item) => item.leadId === selectedTarget.id);
+        if (convo?.id) {
+          setSelectedConversationId(convo.id);
+          await loadConversationMessages(convo.id, key);
+        }
       }
     } catch (err) {
       setStatus('Erro ao enviar mensagem');
+    } finally {
+      setMessageFile(null);
+      setSending(false);
     }
   };
 
@@ -282,7 +467,14 @@ export default function LeadsPage() {
     setTagsByLead((prev) => {
       const existing = prev[selectedLead.id] || [];
       if (existing.includes(nextTag)) return prev;
-      return { ...prev, [selectedLead.id]: [...existing, nextTag] };
+      const nextTags = [...existing, nextTag];
+      updateLead(selectedLead.id, {
+        customFields: {
+          ...(selectedLead.customFields || {}),
+          tags: nextTags,
+        },
+      });
+      return { ...prev, [selectedLead.id]: nextTags };
     });
   };
 
@@ -290,13 +482,47 @@ export default function LeadsPage() {
     if (!selectedLead) return;
     setTagsByLead((prev) => {
       const existing = prev[selectedLead.id] || [];
-      return { ...prev, [selectedLead.id]: existing.filter((item) => item !== tag) };
+      const nextTags = existing.filter((item) => item !== tag);
+      updateLead(selectedLead.id, {
+        customFields: {
+          ...(selectedLead.customFields || {}),
+          tags: nextTags,
+        },
+      });
+      return { ...prev, [selectedLead.id]: nextTags };
     });
   };
 
   const handlePipelineRename = (index: number, value: string) => {
     setPipeline((prev) => prev.map((stage, idx) => (idx === index ? value : stage)));
   };
+
+  useEffect(() => {
+    if (!selectedTarget) return;
+    fetchProfilePicture(selectedTarget);
+
+    if (selectedTarget.type === 'contact') {
+      const conversation = conversationsByLeadId[selectedTarget.id];
+      const targetKey = `contact:${selectedTarget.id}`;
+      if (conversation?.id) {
+        setSelectedConversationId(conversation.id);
+        loadConversationMessages(conversation.id, targetKey);
+      } else {
+        setSelectedConversationId(null);
+        setMessagesByTarget((prev) => ({ ...prev, [targetKey]: [] }));
+      }
+    } else {
+      const conversation = conversationsByGroupId[selectedTarget.id];
+      const targetKey = `group:${selectedTarget.id}`;
+      if (conversation?.id) {
+        setSelectedConversationId(conversation.id);
+        loadConversationMessages(conversation.id, targetKey);
+      } else {
+        setSelectedConversationId(null);
+        setMessagesByTarget((prev) => ({ ...prev, [targetKey]: [] }));
+      }
+    }
+  }, [selectedTarget, conversationsByLeadId, conversationsByGroupId]);
 
   if (loading) {
     return (
@@ -496,9 +722,15 @@ export default function LeadsPage() {
                     <p className="p-4 text-sm text-slate-400">Nenhum lead encontrado.</p>
                   )}
                   {filteredLeads.map((lead) => {
+                    const conversation = conversationsByLeadId[lead.id];
+                    const lastMessage =
+                      conversation?.lastMessage || lead.lastMessage || 'Sem mensagens recentes';
+                    const lastMessageAt = conversation?.lastMessageAt || lead.lastMessageAt;
+                    const avatarUrl = profilePhotos[lead.id] || lead.avatarUrl;
                     const stageLabel = lead.pipelineStage || 'Novo';
                     const tagList = [
                       ...(lead.tags || []).map((item) => item.tag.name),
+                      ...(lead.customFields?.tags || []),
                       ...(tagsByLead[lead.id] || []),
                     ];
                     return (
@@ -520,20 +752,26 @@ export default function LeadsPage() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-[#2a3942] text-white flex items-center justify-center text-sm font-semibold">
-                            {lead.name?.slice(0, 2).toUpperCase()}
+                          <div className="h-10 w-10 rounded-full bg-[#2a3942] text-white flex items-center justify-center overflow-hidden text-sm font-semibold">
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt={lead.name} className="h-full w-full object-cover" />
+                            ) : (
+                              lead.name?.slice(0, 2).toUpperCase()
+                            )}
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-white">{lead.name}</p>
                             <p className="text-xs text-slate-400">
-                              {lead.lastMessage || 'Sem mensagens recentes'}
+                              {lastMessage}
                             </p>
                           </div>
                           <span className="text-[10px] text-slate-400">
-                            {lead.lastMessageAt ? new Date(lead.lastMessageAt).toLocaleTimeString('pt-BR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            }) : ''}
+                            {lastMessageAt
+                              ? new Date(lastMessageAt).toLocaleTimeString('pt-BR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -565,8 +803,16 @@ export default function LeadsPage() {
             <div className="flex items-center justify-between border-b border-[#202c33] px-4 py-3">
               {selectedTarget ? (
                 <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-[#2a3942] flex items-center justify-center text-sm font-semibold">
-                    {selectedTarget.name?.slice(0, 2).toUpperCase()}
+                  <div className="h-9 w-9 rounded-full bg-[#2a3942] flex items-center justify-center overflow-hidden text-sm font-semibold">
+                    {selectedTarget.type === 'contact' && profilePhotos[selectedTarget.id] ? (
+                      <img
+                        src={profilePhotos[selectedTarget.id]}
+                        alt={selectedTarget.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      selectedTarget.name?.slice(0, 2).toUpperCase()
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{selectedTarget.name}</p>
@@ -611,7 +857,14 @@ export default function LeadsPage() {
             <div className="border-t border-[#202c33] px-4 py-3">
               <div className="flex items-center gap-2">
                 <button type="button" className="text-slate-400">😊</button>
-                <button type="button" className="text-slate-400">📎</button>
+                <label className="text-slate-400 cursor-pointer">
+                  📎
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(event) => setMessageFile(event.target.files?.[0] || null)}
+                  />
+                </label>
                 <input
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
@@ -621,11 +874,15 @@ export default function LeadsPage() {
                 <button
                   type="button"
                   onClick={handleSendMessage}
-                  className="rounded-2xl bg-[#00a884] px-4 py-2 text-sm font-semibold text-[#0b141a]"
+                  disabled={sending}
+                  className="rounded-2xl bg-[#00a884] px-4 py-2 text-sm font-semibold text-[#0b141a] disabled:opacity-60"
                 >
-                  Enviar
+                  {sending ? 'Enviando...' : 'Enviar'}
                 </button>
               </div>
+              {messageFile && (
+                <p className="mt-2 text-xs text-slate-400">Arquivo: {messageFile.name}</p>
+              )}
             </div>
           </div>
 
@@ -653,6 +910,7 @@ export default function LeadsPage() {
                               : lead,
                           ),
                         );
+                        updateLead(selectedLead.id, { pipelineStage: nextStage });
                       }}
                       className="mt-2 w-full rounded-xl border border-[#202c33] bg-[#0b141a] px-3 py-2 text-sm text-white"
                     >
@@ -707,6 +965,9 @@ export default function LeadsPage() {
                           ...prev,
                           [selectedLead.id]: event.target.value,
                         }))
+                      }
+                      onBlur={(event) =>
+                        updateLead(selectedLead.id, { notes: event.target.value })
                       }
                       placeholder="Escreva observacoes importantes"
                       rows={4}

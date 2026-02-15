@@ -321,6 +321,15 @@ export class WhatsAppService {
     );
   }
 
+  async getProfilePicture(workspaceId: string, target: string) {
+    const isConnected = await this.isConnected(workspaceId);
+    if (!isConnected) {
+      throw new Error('WhatsApp nao esta conectado');
+    }
+
+    return this.defaultProvider.getProfilePicture(workspaceId, target);
+  }
+
   /**
    * Sincronizar contatos para o CRM
    */

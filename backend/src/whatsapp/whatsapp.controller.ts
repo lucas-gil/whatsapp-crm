@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Body,
+  Query,
   Request,
   UploadedFile,
   UseInterceptors,
@@ -168,6 +169,19 @@ export class WhatsAppController {
   @Get('contacts')
   async listContacts(@Request() req: any) {
     return this.whatsAppService.listContacts(req.user.workspaceId);
+  }
+
+  /**
+   * Obter foto de perfil de um contato
+   */
+  @Get('profile-picture')
+  async getProfilePicture(@Query('to') to: string, @Request() req: any) {
+    if (!to) {
+      throw new BadRequestException('to e obrigatorio');
+    }
+
+    const url = await this.whatsAppService.getProfilePicture(req.user.workspaceId, to);
+    return { url };
   }
 
   /**
