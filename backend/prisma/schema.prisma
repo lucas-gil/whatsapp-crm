@@ -212,8 +212,8 @@ model Conversation {
   workspaceId     String
   workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   
-  leadId          String
-  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId          String?
+  lead            Lead?       @relation(fields: [leadId], references: [id], onDelete: Cascade)
   
   groupId         String?     // se for mensagem de grupo
   group           Group?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
