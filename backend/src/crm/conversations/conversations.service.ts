@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 
 @Injectable()
 export class ConversationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsAppService: WhatsAppService,
+  ) {}
 
   async listConversations(workspaceId: string, filters?: any) {
     return this.prisma.conversation.findMany({
@@ -37,7 +41,8 @@ export class ConversationsService {
   }
 
   async sendMessage(workspaceId: string, conversationId: string, data: any) {
-    return this.prisma.message.create({
+    // Salva a mensagem no banco
+    const message = await this.prisma.message.create({
       data: {
         workspaceId,
         conversationId,
@@ -48,6 +53,36 @@ export class ConversationsService {
       },
       include: { attachments: true },
     });
+
+    // Busca o destinatário (lead ou grupo)
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { lead: true, group: true },
+    });
+    let to = '';
+    if (conversation?.lead?.phoneNumber) {
+      to = conversation.lead.phoneNumber;
+    } else if (conversation?.group?.whatsappGroupId) {
+      to = conversation.group.whatsappGroupId;
+    }
+
+    // Envia a mensagem real pelo WhatsApp
+    if (to && data.text) {
+      try {
+        await this.whatsAppService.sendText(workspaceId, to, data.text);
+        // Atualiza status para 'SENT'
+        await this.prisma.message.update({
+          where: { id: message.id },
+          data: { status: 'SENT' },
+        });
+      } catch (error) {
+        await this.prisma.message.update({
+          where: { id: message.id },
+          data: { status: 'FAILED' },
+        });
+      }
+    }
+    return message;
   }
 
   async markAsRead(workspaceId: string, conversationId: string) {
