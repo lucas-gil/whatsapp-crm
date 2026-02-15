@@ -131,10 +131,11 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const messageId = await this.defaultProvider.sendText(workspaceId, to, text);
+    const resolvedTo = this.resolveTargetJid(workspaceId, to);
+    const messageId = await this.defaultProvider.sendText(workspaceId, resolvedTo, text);
 
     // Registrar no banco
-    await this.logMessage(workspaceId, to, text, 'text', messageId);
+    await this.logMessage(workspaceId, resolvedTo, text, 'text', messageId);
 
     return { messageId, status: 'sent', timestamp: new Date() };
   }
@@ -155,16 +156,23 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
+    const resolvedTo = this.resolveTargetJid(workspaceId, to);
     const messageId = await this.defaultProvider.sendMedia(
       workspaceId,
-      to,
+      resolvedTo,
       buffer,
       fileName,
       mimeType,
       caption,
     );
 
-    await this.logMessage(workspaceId, to, caption || fileName, 'media', messageId);
+    await this.logMessage(
+      workspaceId,
+      resolvedTo,
+      caption || fileName,
+      'media',
+      messageId,
+    );
 
     return { messageId, status: 'sent', timestamp: new Date() };
   }
@@ -183,14 +191,15 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
+    const resolvedTo = this.resolveTargetJid(workspaceId, to);
     const messageId = await this.defaultProvider.sendPoll(
       workspaceId,
-      to,
+      resolvedTo,
       question,
       options,
     );
 
-    await this.logMessage(workspaceId, to, question, 'poll', messageId);
+    await this.logMessage(workspaceId, resolvedTo, question, 'poll', messageId);
 
     return { messageId, status: 'sent', timestamp: new Date() };
   }
@@ -1488,7 +1497,16 @@ export class WhatsAppService {
     }
 
     const recent = this.recentJids.get(workspaceId)?.get(target);
-    return recent || `${target}@s.whatsapp.net`;
+    if (recent) {
+      return recent;
+    }
+
+    const numericTarget = target.replace(/\D/g, '');
+    if (numericTarget.length > 15) {
+      return `${numericTarget}@lid`;
+    }
+
+    return `${numericTarget || target}@s.whatsapp.net`;
   }
 
   async getSettings(workspaceId: string) {
