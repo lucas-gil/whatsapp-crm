@@ -131,11 +131,28 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const resolvedTo = this.resolveTargetJid(workspaceId, to);
-    const messageId = await this.defaultProvider.sendText(workspaceId, resolvedTo, text);
+    const targets = this.buildSendTargets(workspaceId, to);
+    let messageId = '';
+    let usedTarget = targets[0];
+    let lastError: unknown = null;
+
+    for (const target of targets) {
+      try {
+        messageId = await this.defaultProvider.sendText(workspaceId, target, text);
+        usedTarget = target;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
 
     // Registrar no banco
-    await this.logMessage(workspaceId, resolvedTo, text, 'text', messageId);
+    await this.logMessage(workspaceId, usedTarget, text, 'text', messageId);
 
     return { messageId, status: 'sent', timestamp: new Date() };
   }
@@ -156,19 +173,36 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const resolvedTo = this.resolveTargetJid(workspaceId, to);
-    const messageId = await this.defaultProvider.sendMedia(
-      workspaceId,
-      resolvedTo,
-      buffer,
-      fileName,
-      mimeType,
-      caption,
-    );
+    const targets = this.buildSendTargets(workspaceId, to);
+    let messageId = '';
+    let usedTarget = targets[0];
+    let lastError: unknown = null;
+
+    for (const target of targets) {
+      try {
+        messageId = await this.defaultProvider.sendMedia(
+          workspaceId,
+          target,
+          buffer,
+          fileName,
+          mimeType,
+          caption,
+        );
+        usedTarget = target;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
 
     await this.logMessage(
       workspaceId,
-      resolvedTo,
+      usedTarget,
       caption || fileName,
       'media',
       messageId,
@@ -191,15 +225,32 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const resolvedTo = this.resolveTargetJid(workspaceId, to);
-    const messageId = await this.defaultProvider.sendPoll(
-      workspaceId,
-      resolvedTo,
-      question,
-      options,
-    );
+    const targets = this.buildSendTargets(workspaceId, to);
+    let messageId = '';
+    let usedTarget = targets[0];
+    let lastError: unknown = null;
 
-    await this.logMessage(workspaceId, resolvedTo, question, 'poll', messageId);
+    for (const target of targets) {
+      try {
+        messageId = await this.defaultProvider.sendPoll(
+          workspaceId,
+          target,
+          question,
+          options,
+        );
+        usedTarget = target;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    await this.logMessage(workspaceId, usedTarget, question, 'poll', messageId);
 
     return { messageId, status: 'sent', timestamp: new Date() };
   }
@@ -1505,11 +1556,19 @@ export class WhatsAppService {
     }
 
     const numericTarget = target.replace(/\D/g, '');
-    if (numericTarget.length >= 15) {
-      return `${numericTarget}@lid`;
+    return `${numericTarget || target}@s.whatsapp.net`;
+  }
+
+  private buildSendTargets(workspaceId: string, target: string): string[] {
+    const resolved = this.resolveTargetJid(workspaceId, target);
+    const targets = new Set([resolved]);
+    const numeric = this.normalizePhoneNumber(resolved);
+
+    if (!resolved.includes('@lid') && numeric.length >= 15) {
+      targets.add(`${numeric}@lid`);
     }
 
-    return `${numericTarget || target}@s.whatsapp.net`;
+    return Array.from(targets);
   }
 
   async getSettings(workspaceId: string) {
