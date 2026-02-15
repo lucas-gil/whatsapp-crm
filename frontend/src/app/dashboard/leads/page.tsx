@@ -108,6 +108,9 @@ export default function LeadsPage() {
   const [profilePhotos, setProfilePhotos] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [unreadByLeadId, setUnreadByLeadId] = useState<Record<string, boolean>>({});
   const [unreadByGroupId, setUnreadByGroupId] = useState<Record<string, boolean>>({});
@@ -183,9 +186,10 @@ export default function LeadsPage() {
 
     const merged: Lead[] = contactsList.map((contact: any) => {
       const leadMatch = contact.phoneNumber ? leadsByPhone.get(contact.phoneNumber) : undefined;
+      const fallbackName = contact.phoneNumber || contact.name || 'Contato';
       return {
         id: leadMatch?.id || contact.id,
-        name: leadMatch?.name || contact.name || contact.phoneNumber || 'Contato',
+        name: leadMatch?.name || fallbackName,
         phoneNumber: leadMatch?.phoneNumber || contact.phoneNumber,
         email: leadMatch?.email || null,
         pipelineStage: leadMatch?.pipelineStage || 'Novo',
@@ -492,8 +496,24 @@ export default function LeadsPage() {
 
   useEffect(() => {
     if (!chatMessages.length) return;
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages.length, selectedTarget]);
+    if (isAtBottom) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setHasNewMessages(false);
+    } else {
+      setHasNewMessages(true);
+    }
+  }, [chatMessages.length, selectedTarget, isAtBottom]);
+
+  const handleChatScroll = () => {
+    const node = chatScrollRef.current;
+    if (!node) return;
+    const threshold = 80;
+    const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < threshold;
+    setIsAtBottom(atBottom);
+    if (atBottom) {
+      setHasNewMessages(false);
+    }
+  };
 
   const stageOptions = useMemo(() => {
     return pipeline.length ? pipeline : stageDefaults;
@@ -564,13 +584,22 @@ export default function LeadsPage() {
         }
       }
 
-      if (selectedConversationId) {
-        await loadConversationMessages(selectedConversationId, key);
-      }
+      const refreshed = await fetchConversations({ Authorization: `Bearer ${token}` });
 
       if (selectedTarget.type === 'contact') {
-        const refreshed = await fetchConversations({ Authorization: `Bearer ${token}` });
-        const convo = refreshed.find((item) => item.leadId === selectedTarget.id);
+        const convo = refreshed.find(
+          (item) =>
+            item.leadId === selectedTarget.id ||
+            (selectedTarget.phoneNumber && item.lead?.phoneNumber === selectedTarget.phoneNumber),
+        );
+        if (convo?.id) {
+          setSelectedConversationId(convo.id);
+          await loadConversationMessages(convo.id, key);
+        }
+      }
+
+      if (selectedTarget.type === 'group') {
+        const convo = refreshed.find((item) => item.groupId === selectedTarget.id);
         if (convo?.id) {
           setSelectedConversationId(convo.id);
           await loadConversationMessages(convo.id, key);
@@ -662,7 +691,7 @@ export default function LeadsPage() {
         const key = `${selectedTarget.type}:${selectedTarget.id}`;
         await loadConversationMessages(selectedConversationId, key);
       }
-    }, 12000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [token, selectedConversationId, selectedTarget]);
@@ -1005,7 +1034,11 @@ export default function LeadsPage() {
               </div>
             </div>
 
-            <div className="wa-chat-bg flex-1 p-6 space-y-4 overflow-auto">
+            <div
+              ref={chatScrollRef}
+              onScroll={handleChatScroll}
+              className="wa-chat-bg relative flex-1 p-6 space-y-4 overflow-auto"
+            >
               {selectedTarget && chatMessages.length === 0 && (
                 <p className="text-sm text-slate-400">Nenhuma mensagem ainda.</p>
               )}
@@ -1028,6 +1061,19 @@ export default function LeadsPage() {
                 </div>
               ))}
               <div ref={chatEndRef} />
+              {hasNewMessages && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    setHasNewMessages(false);
+                    setIsAtBottom(true);
+                  }}
+                  className="sticky bottom-4 mx-auto block rounded-full bg-[#00a884] px-4 py-2 text-xs font-semibold text-[#0b141a] shadow-lg"
+                >
+                  Ver novas mensagens
+                </button>
+              )}
             </div>
 
             <div className="border-t border-[#202c33] px-4 py-3">
