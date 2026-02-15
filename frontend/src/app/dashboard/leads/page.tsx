@@ -428,7 +428,7 @@ export default function LeadsPage() {
     const normalizedSearch = search.trim().toLowerCase();
     const normalizedTag = tagFilter.trim().toLowerCase();
 
-    return leads.filter((lead) => {
+    const next = leads.filter((lead) => {
       const stageMatch = stageFilter
         ? (lead.pipelineStage || '').toLowerCase() === stageFilter.toLowerCase()
         : true;
@@ -448,12 +448,36 @@ export default function LeadsPage() {
       const unreadMatch = showUnreadOnly ? !!unreadByLeadId[lead.id] : true;
       return stageMatch && searchMatch && tagMatch && unreadMatch;
     });
-  }, [leads, search, stageFilter, tagFilter, tagsByLead, showUnreadOnly, unreadByLeadId]);
+    return next.sort((a, b) => {
+      const convoA = conversationsByLeadId[a.id];
+      const convoB = conversationsByLeadId[b.id];
+      const aTime = new Date(convoA?.lastMessageAt || a.lastMessageAt || 0).getTime();
+      const bTime = new Date(convoB?.lastMessageAt || b.lastMessageAt || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [
+    leads,
+    search,
+    stageFilter,
+    tagFilter,
+    tagsByLead,
+    showUnreadOnly,
+    unreadByLeadId,
+    conversationsByLeadId,
+  ]);
 
   const filteredGroups = useMemo(() => {
-    if (!showUnreadOnly) return groups;
-    return groups.filter((group) => unreadByGroupId[group.id]);
-  }, [groups, showUnreadOnly, unreadByGroupId]);
+    const next = showUnreadOnly
+      ? groups.filter((group) => unreadByGroupId[group.id])
+      : [...groups];
+    return next.sort((a, b) => {
+      const convoA = conversationsByGroupId[a.id];
+      const convoB = conversationsByGroupId[b.id];
+      const aTime = new Date(convoA?.lastMessageAt || 0).getTime();
+      const bTime = new Date(convoB?.lastMessageAt || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [groups, showUnreadOnly, unreadByGroupId, conversationsByGroupId]);
 
   const selectedLead = useMemo(() => {
     if (selectedTarget?.type !== 'contact') return null;
