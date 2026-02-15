@@ -189,8 +189,8 @@ model Tag {
 
 model LeadTag {
   id              String      @id @default(cuid())
-  leadId          String
-  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId          String?
+  lead            Lead?       @relation(fields: [leadId], references: [id], onDelete: Cascade)
   
   tagId           String
   tag             Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
@@ -230,7 +230,8 @@ model Conversation {
   // Relations
   messages        Message[]
 
-  @@unique([workspaceId, leadId, groupId]) // permite múltiplas conversas: 1:1 e grupo
+  @@unique([workspaceId, leadId])
+  @@unique([workspaceId, groupId])
   @@index([workspaceId])
   @@index([leadId])
   @@index([groupId])

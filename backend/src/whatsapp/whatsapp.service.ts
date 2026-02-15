@@ -273,7 +273,52 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    return this.defaultProvider.listGroups(workspaceId);
+    const providerGroups = await this.defaultProvider.listGroups(workspaceId);
+    const storedGroups = await Promise.all(
+      providerGroups.map(async (group: any) => {
+        if (!group?.id) return null;
+        const existing = await this.prisma.group.findFirst({
+          where: {
+            workspaceId,
+            whatsappGroupId: group.id,
+          },
+        });
+
+        if (existing) {
+          if (existing.name !== group.name) {
+            await this.prisma.group.update({
+              where: { id: existing.id },
+              data: { name: group.name || existing.name },
+            });
+          }
+          return {
+            id: existing.id,
+            name: group.name || existing.name,
+            participantCount: group.participantCount || 0,
+            whatsappGroupId: group.id,
+          };
+        }
+
+        const created = await this.prisma.group.create({
+          data: {
+            workspaceId,
+            name: group.name || group.id,
+            whatsappGroupId: group.id,
+          },
+        });
+
+        return {
+          id: created.id,
+          name: created.name,
+          participantCount: group.participantCount || 0,
+          whatsappGroupId: group.id,
+        };
+      }),
+    );
+
+    return storedGroups
+      .filter(Boolean)
+      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR'));
   }
 
   /**
@@ -327,7 +372,14 @@ export class WhatsAppService {
       throw new Error('WhatsApp nao esta conectado');
     }
 
-    return this.defaultProvider.getProfilePicture(workspaceId, target);
+    const normalizedTarget =
+      target === 'me' || target === 'self'
+        ? target
+        : target.includes('@')
+          ? target
+          : `${target}@s.whatsapp.net`;
+
+    return this.defaultProvider.getProfilePicture(workspaceId, normalizedTarget);
   }
 
   /**
@@ -591,10 +643,102 @@ export class WhatsAppService {
    * Handle: Mensagem recebida
    */
   private async handleMessageReceived(workspaceId: string, payload: any): Promise<void> {
-    const { from, messageId, text, type, timestamp } = payload;
+    const { from, messageId, text, type, timestamp, participant, pushName } = payload;
     this.logger.info(`📥 Mensagem recebida de ${from}: ${text?.substring(0, 30)}`);
 
     try {
+      const isGroup = !!from && from.endsWith('@g.us');
+      if (isGroup) {
+        const groupJid = from;
+        const participantJid = participant || '';
+        const participantPhone = participantJid
+          ? this.normalizePhoneNumber(participantJid)
+          : null;
+        const normalizedParticipant = participantJid
+          ? this.normalizeJid(participantJid)
+          : null;
+
+        if (participantJid) {
+          this.rememberJid(workspaceId, participantJid);
+        }
+
+        let senderLead = null;
+        if (participantPhone) {
+          senderLead = await this.prisma.lead.findFirst({
+            where: { workspaceId, phoneNumber: participantPhone },
+          });
+
+          if (!senderLead) {
+            senderLead = await this.prisma.lead.create({
+              data: {
+                workspaceId,
+                phoneNumber: participantPhone,
+                name: pushName || participantPhone,
+                origin: 'whatsapp_group',
+              },
+            });
+          }
+        }
+
+        let group = await this.prisma.group.findFirst({
+          where: { workspaceId, whatsappGroupId: groupJid },
+        });
+
+        if (!group) {
+          group = await this.prisma.group.create({
+            data: {
+              workspaceId,
+              name: groupJid,
+              whatsappGroupId: groupJid,
+            },
+          });
+        }
+
+        const existingConversation = await this.prisma.conversation.findFirst({
+          where: {
+            workspaceId,
+            groupId: group.id,
+          },
+        });
+
+        const conversation = existingConversation
+          ? await this.prisma.conversation.update({
+              where: { id: existingConversation.id },
+              data: {
+                lastMessageAt: new Date(timestamp),
+                lastMessage: text || `[${type}]`,
+              },
+            })
+          : await this.prisma.conversation.create({
+              data: {
+                workspaceId,
+                groupId: group.id,
+                leadId: null,
+                lastMessageAt: new Date(timestamp),
+                lastMessage: text || `[${type}]`,
+              },
+            });
+
+        await this.prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            workspaceId,
+            whatsappMessageId: messageId,
+            direction: 'INCOMING',
+            text: text || `[${type}]`,
+            type,
+            senderPhoneNumber: participantPhone || null,
+            senderName:
+              senderLead?.name || pushName || participantPhone || normalizedParticipant || null,
+            status: 'SENT',
+            createdAt: new Date(timestamp),
+          },
+        });
+
+        this.logger.info(`✅ Mensagem de grupo salva: ${messageId}`);
+        return;
+      }
+
       // Encontrar ou criar lead/conversa
       const phoneNumber = this.normalizePhoneNumber(from);
       const normalizedFrom = this.normalizeJid(from);
@@ -665,10 +809,8 @@ export class WhatsAppService {
 
       this.logger.info(`✅ Mensagem salva: ${messageId}`);
 
-      if (!from.endsWith('@g.us')) {
-        await this.handleAutoPollStart(workspaceId, phoneNumber, normalizedFrom);
-        await this.handlePollResponse(workspaceId, phoneNumber, text, normalizedFrom);
-      }
+      await this.handleAutoPollStart(workspaceId, phoneNumber, normalizedFrom);
+      await this.handlePollResponse(workspaceId, phoneNumber, text, normalizedFrom);
     } catch (error) {
       this.logger.error(`Erro ao processar mensagem recebida:`, error);
     }
@@ -742,6 +884,58 @@ export class WhatsAppService {
   ): Promise<void> {
     try {
       if (to.endsWith('@g.us')) {
+        let group = await this.prisma.group.findFirst({
+          where: { workspaceId, whatsappGroupId: to },
+        });
+
+        if (!group) {
+          group = await this.prisma.group.create({
+            data: {
+              workspaceId,
+              name: to,
+              whatsappGroupId: to,
+            },
+          });
+        }
+
+        const existingConversation = await this.prisma.conversation.findFirst({
+          where: {
+            workspaceId,
+            groupId: group.id,
+          },
+        });
+
+        const conversation = existingConversation
+          ? await this.prisma.conversation.update({
+              where: { id: existingConversation.id },
+              data: {
+                lastMessageAt: new Date(),
+                lastMessage: text || `[${type}]`,
+              },
+            })
+          : await this.prisma.conversation.create({
+              data: {
+                workspaceId,
+                groupId: group.id,
+                leadId: null,
+                lastMessageAt: new Date(),
+                lastMessage: text || `[${type}]`,
+              },
+            });
+
+        await this.prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            workspaceId,
+            whatsappMessageId: messageId,
+            direction: 'OUTGOING',
+            text: text || `[${type}]`,
+            type,
+            status: 'SENT',
+            createdAt: new Date(),
+          },
+        });
+
         return;
       }
 

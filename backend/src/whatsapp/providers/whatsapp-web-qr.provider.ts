@@ -115,7 +115,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         browser: ['WhatsApp CRM', 'Desktop', '2.3000.1013807438'],
         version: waVersion,
         syncFullHistory: false,
-        shouldIgnoreJid: (jid) => !jid || jid.endsWith('@g.us'),
+        shouldIgnoreJid: (jid) => !jid,
         keepAliveIntervalMs: 30000,
         connectTimeoutMs: 180000, // Aumentar timeout de conexão para 3 minutos
         logger: baileysLogger,
@@ -266,6 +266,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
           this.emitEvent(workspaceId, 'message_received', {
             from: message.key.remoteJid,
+            participant: message.key.participant,
+            pushName: message.pushName,
             messageId: message.key.id,
             timestamp: message.messageTimestamp,
             text: message.message?.conversation || message.message?.extendedTextMessage?.text,

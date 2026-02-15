@@ -25,6 +25,7 @@ type Group = {
   id: string;
   name: string;
   participantCount: number;
+  whatsappGroupId?: string | null;
 };
 
 type ChatMessage = {
@@ -489,7 +490,7 @@ export default function LeadsPage() {
     try {
       const targetValue =
         selectedTarget.type === 'group'
-          ? selectedTarget.id
+          ? selectedTarget.jid || selectedTarget.id
           : selectedTarget.jid || selectedTarget.phoneNumber || selectedTarget.id;
 
       if (messageFile) {
@@ -827,6 +828,7 @@ export default function LeadsPage() {
                             type: 'group',
                             id: group.id,
                             name: group.name,
+                            jid: group.whatsappGroupId || group.id,
                           })
                         }
                         className={`w-full text-left rounded-xl border border-[#202c33] bg-[#0b141a] p-3 transition ${
