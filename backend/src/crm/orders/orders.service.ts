@@ -1,9 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
 
 @Injectable()
 export class OrdersService {
+  private logger = new Logger(OrdersService.name);
+
   constructor(
     private prisma: PrismaService,
     private whatsAppService: WhatsAppService,
@@ -305,11 +307,25 @@ export class OrdersService {
     return map[status] || status;
   }
 
+  private normalizeTarget(target: string) {
+    if (!target) return '';
+    if (target.includes('@')) {
+      return target;
+    }
+    return target.replace(/\D/g, '');
+  }
+
   private async safeSendMessage(workspaceId: string, to: string, text: string) {
+    const target = this.normalizeTarget(to);
+    if (!target) {
+      this.logger.warn('Skipped send message: empty target');
+      return;
+    }
     try {
-      await this.whatsAppService.sendText(workspaceId, to, text);
+      await this.whatsAppService.sendText(workspaceId, target, text);
     } catch (error) {
-      // ignore send failures
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to send order message: ${message}`);
     }
   }
 }
