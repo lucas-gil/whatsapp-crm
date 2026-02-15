@@ -26,6 +26,10 @@ model Workspace {
   messages      Message[]
   tags          Tag[]
   groups        Group[]
+  products      Product[]
+  inventoryItems InventoryItem[]
+  inventoryMovements InventoryMovement[]
+  orders        Order[]
   templates     Template[]
   broadcasts    Broadcast[]
   pollCampaigns PollCampaign[]
@@ -161,6 +165,7 @@ model Lead {
   tags            LeadTag[]
   conversations   Conversation[]
   broadcasts      BroadcastRecipient[]
+  orders          Order[]
 
   @@unique([workspaceId, phoneNumber])
   @@index([workspaceId])
