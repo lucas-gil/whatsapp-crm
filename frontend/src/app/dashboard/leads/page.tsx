@@ -579,10 +579,13 @@ export default function LeadsPage() {
 
     const text = messageInput.trim();
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
-    let targetValue =
-      selectedTarget.type === 'group'
-        ? selectedTarget.jid || selectedTarget.id
-        : selectedTarget.jid || selectedTarget.phoneNumber || '';
+    let targetValue = '';
+    if (selectedTarget.type === 'group') {
+      targetValue = selectedTarget.jid || selectedTarget.id || '';
+    } else {
+      // prefer phoneNumber when available (avoid using internal jid/id strings)
+      targetValue = selectedTarget.phoneNumber || selectedTarget.jid || selectedTarget.id || '';
+    }
 
     // fallback: try to resolve phoneNumber from existing conversations if missing
     if (!targetValue && selectedTarget.type === 'contact') {
