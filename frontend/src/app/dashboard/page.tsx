@@ -5,6 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function DashboardPage() {
   const { token, loading: authLoading, error: authError } = useAuth();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<any[]>([]);
   const [conversations, setConversations] = useState<any[]>([]);
@@ -26,14 +32,14 @@ export default function DashboardPage() {
       };
 
       // Buscar leads
-      const leadsRes = await fetch('/api/crm/leads', { headers });
+      const leadsRes = await fetch(`${api}/crm/leads`, { headers });
       if (leadsRes.ok) {
         const leadsData = await leadsRes.json();
         setLeads(leadsData);
       }
 
       // Buscar conversas
-      const convsRes = await fetch('/api/crm/conversations', { headers });
+      const convsRes = await fetch(`${api}/crm/conversations`, { headers });
       if (convsRes.ok) {
         const convsData = await convsRes.json();
         setConversations(convsData);

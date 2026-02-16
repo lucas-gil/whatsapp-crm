@@ -142,10 +142,10 @@ export default function EntregasPage() {
       setLoading(true);
       const headers = { Authorization: `Bearer ${token}` };
       const [productsRes, inventoryRes, ordersRes, leadsRes, contactsRes, groupsRes] = await Promise.all([
-        fetch('/api/crm/products', { headers }),
-        fetch('/api/crm/inventory', { headers }),
-        fetch('/api/crm/orders', { headers }),
-        fetch('/api/crm/leads', { headers }),
+        fetch(`${api}/crm/products`, { headers }),
+        fetch(`${api}/crm/inventory`, { headers }),
+        fetch(`${api}/crm/orders`, { headers }),
+        fetch(`${api}/crm/leads`, { headers }),
         fetch(`${api}/whatsapp/contacts`, { headers }),
         fetch(`${api}/whatsapp/groups`, { headers }),
       ]);
@@ -207,7 +207,7 @@ export default function EntregasPage() {
     if (!token || !newProduct.name.trim()) return;
     setStatus('');
     try {
-      const response = await fetch('/api/crm/products', {
+      const response = await fetch(`${api}/crm/products`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -256,7 +256,7 @@ export default function EntregasPage() {
     if (!token || !adjustStock.productId || !adjustStock.quantity) return;
     setStatus('');
     try {
-      const response = await fetch('/api/crm/inventory/adjust', {
+      const response = await fetch(`${api}/crm/inventory/adjust`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -293,7 +293,7 @@ export default function EntregasPage() {
     }
     setStatus('');
     try {
-      const response = await fetch('/api/crm/orders', {
+      const response = await fetch(`${api}/crm/orders`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -332,7 +332,7 @@ export default function EntregasPage() {
     if (!confirmed) return;
     setStatus('');
     try {
-      const response = await fetch(`/api/crm/products/${productId}`, {
+      const response = await fetch(`${api}/crm/products/${productId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -353,7 +353,7 @@ export default function EntregasPage() {
   const handleUpdateOrderStatus = async (orderId: string, statusValue: string) => {
     if (!token) return;
     try {
-      await fetch(`/api/crm/orders/${orderId}/status`, {
+      await fetch(`${api}/crm/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -370,7 +370,7 @@ export default function EntregasPage() {
   const handleUpdateDelivery = async (orderId: string, statusValue: string) => {
     if (!token) return;
     try {
-      await fetch(`/api/crm/orders/${orderId}/delivery`, {
+      await fetch(`${api}/crm/orders/${orderId}/delivery`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,

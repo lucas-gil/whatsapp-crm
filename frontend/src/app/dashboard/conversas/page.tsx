@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react';
 
 export default function ConversasPage() {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
   const [loading, setLoading] = useState(true);
   const [conversations, setConversations] = useState<any[]>([]);
   const [error, setError] = useState('');
@@ -14,7 +20,7 @@ export default function ConversasPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/crm/conversations');
+      const res = await fetch(`${api}/crm/conversations`);
       if (res.ok) {
         const data = await res.json();
         setConversations(data);
