@@ -61,7 +61,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     // TODO: Implementar chamada para Cloud API
     // POST /v18.0/{PHONE_ID}/messages
     this.logger.info(`[STUB] Enviando mensagem para ${to}: ${text}`);
-    return 'msg_' + Date.now();
+    return { messageId: 'msg_' + Date.now(), timestamp: Date.now() };
   }
 
   async sendMedia(
@@ -74,7 +74,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
   ): Promise<string> {
     // TODO: Upload mídia e enviar via Cloud API
     this.logger.info(`[STUB] Enviando mídia para ${to}: ${fileName}`);
-    return 'msg_' + Date.now();
+    return { messageId: 'msg_' + Date.now(), timestamp: Date.now() };
   }
 
   async sendPoll(
@@ -87,7 +87,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     this.logger.info(
       `[STUB] Enviando enquete para ${to}: ${question}`,
     );
-    return 'msg_' + Date.now();
+    return { messageId: 'msg_' + Date.now(), timestamp: Date.now() };
   }
 
   async listGroups(workspaceId: string): Promise<any[]> {

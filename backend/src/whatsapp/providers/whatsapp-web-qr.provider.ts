@@ -467,15 +467,21 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
       const response = await socket.sendMessage(jid, { text });
       const messageId = response.key.id;
+      // Tenta extrair timestamp retornado pelo Baileys
+      const ts =
+        (response as any)?.messageTimestamp ||
+        (response as any)?.message?.timestamp ||
+        (response as any)?.message?.messageTimestamp ||
+        Date.now();
 
-      this.logger.info(`✉️ Mensagem enviada para ${to}: ${messageId}`);
+      this.logger.info(`✉️ Mensagem enviada para ${to}: ${messageId} (ts=${ts})`);
       this.emitEvent(workspaceId, 'message_sent', {
         to,
         messageId,
-        timestamp: Date.now(),
+        timestamp: ts,
       });
 
-      return messageId;
+      return { messageId, timestamp: ts };
     } catch (error) {
       this.logger.error(`Erro ao enviar mensagem para ${to}:`, error);
       throw error;
@@ -509,9 +515,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       const response = await socket.sendMessage(jid, messagePayload);
       const messageId = response.key.id;
-
-      this.logger.info(`📎 Mídia enviada para ${to}: ${messageId}`);
-      return messageId;
+      const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
+      this.logger.info(`📎 Mídia enviada para ${to}: ${messageId} (ts=${ts})`);
+      return { messageId, timestamp: ts };
     } catch (error) {
       this.logger.error(`Erro ao enviar mídia para ${to}:`, error);
       throw error;
@@ -541,9 +547,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         },
       });
       const messageId = response.key.id;
-
-      this.logger.info(`🗳️ Enquete enviada para ${to}: ${messageId}`);
-      return messageId;
+      const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
+      this.logger.info(`🗳️ Enquete enviada para ${to}: ${messageId} (ts=${ts})`);
+      return { messageId, timestamp: ts };
     } catch (error) {
       this.logger.error(`Erro ao enviar enquete para ${to}:`, error);
       throw error;

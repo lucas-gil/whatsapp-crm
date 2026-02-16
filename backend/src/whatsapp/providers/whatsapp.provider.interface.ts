@@ -36,7 +36,7 @@ export interface WhatsAppProvider {
   disconnect(workspaceId: string): Promise<void>;
 
   // Messaging
-  sendText(workspaceId: string, to: string, text: string): Promise<string>;
+  sendText(workspaceId: string, to: string, text: string): Promise<{ messageId: string; timestamp?: number }>;
   sendMedia(
     workspaceId: string,
     to: string,
@@ -44,13 +44,13 @@ export interface WhatsAppProvider {
     fileName: string,
     mimeType: string,
     caption?: string,
-  ): Promise<string>;
+  ): Promise<{ messageId: string; timestamp?: number }>;
   sendPoll(
     workspaceId: string,
     to: string,
     question: string,
     options: string[],
-  ): Promise<string>;
+  ): Promise<{ messageId: string; timestamp?: number }>;
 
   // Groups
   listGroups(workspaceId: string): Promise<any[]>;

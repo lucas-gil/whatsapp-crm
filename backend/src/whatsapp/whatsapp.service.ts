@@ -116,9 +116,12 @@ export class WhatsAppService {
     let usedTarget = targets[0];
     let lastError: unknown = null;
 
+    let usedTimestamp: number | undefined = undefined;
     for (const target of targets) {
       try {
-        messageId = await this.defaultProvider.sendText(workspaceId, target, text);
+        const res = await this.defaultProvider.sendText(workspaceId, target, text);
+        messageId = (res as any)?.messageId || (res as any)?.id || String(res);
+        usedTimestamp = (res as any)?.timestamp;
         usedTarget = target;
         lastError = null;
         break;
@@ -134,9 +137,16 @@ export class WhatsAppService {
     }
 
     // Registrar no banco (retorna conversationId quando possível)
-    const conversationId = await this.logMessage(workspaceId, usedTarget, text, 'text', messageId);
+    const conversationId = await this.logMessage(
+      workspaceId,
+      usedTarget,
+      text,
+      'text',
+      messageId,
+      usedTimestamp,
+    );
 
-    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
   }
 
   /**
@@ -160,9 +170,10 @@ export class WhatsAppService {
     let usedTarget = targets[0];
     let lastError: unknown = null;
 
+    let usedTimestamp: number | undefined = undefined;
     for (const target of targets) {
       try {
-        messageId = await this.defaultProvider.sendMedia(
+        const res = await this.defaultProvider.sendMedia(
           workspaceId,
           target,
           buffer,
@@ -170,6 +181,8 @@ export class WhatsAppService {
           mimeType,
           caption,
         );
+        messageId = (res as any)?.messageId || (res as any)?.id || String(res);
+        usedTimestamp = (res as any)?.timestamp;
         usedTarget = target;
         lastError = null;
         break;
@@ -190,9 +203,10 @@ export class WhatsAppService {
       caption || fileName,
       'media',
       messageId,
+      usedTimestamp,
     );
 
-    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
   }
 
   /**
@@ -214,14 +228,17 @@ export class WhatsAppService {
     let usedTarget = targets[0];
     let lastError: unknown = null;
 
+    let usedTimestamp: number | undefined = undefined;
     for (const target of targets) {
       try {
-        messageId = await this.defaultProvider.sendPoll(
+        const res = await this.defaultProvider.sendPoll(
           workspaceId,
           target,
           question,
           options,
         );
+        messageId = (res as any)?.messageId || (res as any)?.id || String(res);
+        usedTimestamp = (res as any)?.timestamp;
         usedTarget = target;
         lastError = null;
         break;
@@ -236,9 +253,16 @@ export class WhatsAppService {
       throw lastError;
     }
 
-    const conversationId = await this.logMessage(workspaceId, usedTarget, question, 'poll', messageId);
+    const conversationId = await this.logMessage(
+      workspaceId,
+      usedTarget,
+      question,
+      'poll',
+      messageId,
+      usedTimestamp,
+    );
 
-    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
   }
 
   /**
@@ -931,8 +955,11 @@ export class WhatsAppService {
     text: string,
     type: string,
     messageId: string,
+    timestamp?: number | Date | null,
   ): Promise<string | null> {
     try {
+      const messageDate = this.normalizeTimestamp(timestamp ?? new Date());
+
       if (to.endsWith('@g.us')) {
         let group = await this.prisma.group.findFirst({
           where: { workspaceId, whatsappGroupId: to },
@@ -959,7 +986,7 @@ export class WhatsAppService {
           ? await this.prisma.conversation.update({
               where: { id: existingConversation.id },
               data: {
-                lastMessageAt: new Date(),
+                lastMessageAt: messageDate,
                 lastMessage: text || `[${type}]`,
               },
             })
@@ -967,7 +994,7 @@ export class WhatsAppService {
               data: {
                 workspaceId,
                 groupId: group.id,
-                lastMessageAt: new Date(),
+                lastMessageAt: messageDate,
                 lastMessage: text || `[${type}]`,
               },
             });
@@ -992,7 +1019,7 @@ export class WhatsAppService {
               text: text || existingMsg.text || `[${type}]`,
               type,
               // Atualiza createdAt para hora real do envio (evita ordenacao incorreta)
-              createdAt: new Date(),
+              createdAt: messageDate,
               updatedAt: new Date(),
             },
           });
@@ -1006,7 +1033,7 @@ export class WhatsAppService {
               text: text || `[${type}]`,
               type,
               status: 'SENT',
-              createdAt: new Date(),
+              createdAt: messageDate,
             },
           });
         }
@@ -1040,12 +1067,13 @@ export class WhatsAppService {
           groupId: null,
         },
       });
+      const messageDate = this.normalizeTimestamp(timestamp ?? new Date());
 
       const conversation = existingConversation
         ? await this.prisma.conversation.update({
             where: { id: existingConversation.id },
             data: {
-              lastMessageAt: new Date(),
+              lastMessageAt: messageDate,
               lastMessage: text || `[${type}]`,
             },
           })
@@ -1054,7 +1082,7 @@ export class WhatsAppService {
               workspaceId,
               leadId: lead.id,
               groupId: null,
-              lastMessageAt: new Date(),
+              lastMessageAt: messageDate,
               lastMessage: text || `[${type}]`,
             },
           });
@@ -1079,7 +1107,7 @@ export class WhatsAppService {
             text: text || existingMsg.text,
             type: type,
             // Ajusta createdAt para refletir o momento do envio
-            createdAt: new Date(),
+            createdAt: messageDate,
             updatedAt: new Date(),
           },
         });
@@ -1093,7 +1121,7 @@ export class WhatsAppService {
             text: text,
             type: type,
             status: 'SENT',
-            createdAt: new Date(),
+            createdAt: messageDate,
           },
         });
       }
