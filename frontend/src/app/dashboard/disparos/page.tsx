@@ -1,8 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
+
+const GeminiConfigModal = dynamic(() => import('@/src/components/GeminiConfigModal'), { ssr: false });
 
 export default function DisparosPage() {
+  const [openGemini, setOpenGemini] = useState(false);
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -61,6 +66,26 @@ export default function DisparosPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="border-2 border-dashed border-gray-300 rounded p-6">
               <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">🤖</span>
+                <h3 className="font-bold text-gray-900">Assistente IA (Gemini)</h3>
+              </div>
+              <p className="text-gray-500 text-sm mb-3">
+                Configure a IA para gerar respostas automáticas, baseadas no prompt e arquivos de contexto.
+              </p>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li>Configurar prompt (persona/regra)</li>
+                <li>Upload de arquivos de contexto (imagens, PDFs)</li>
+                <li>Ativar/desativar respostas automáticas</li>
+              </ul>
+              <div className="mt-4">
+                <button onClick={() => setOpenGemini(true)} className="inline-flex items-center justify-center px-4 py-2 bg-whatsapp text-white rounded hover:bg-whatsapp-dark">
+                  Configurar IA
+                </button>
+              </div>
+            </div>
+
+            <div className="border-2 border-dashed border-gray-300 rounded p-6">
+              <div className="flex items-center gap-3 mb-3">
                 <span className="text-2xl">🗳️</span>
                 <h3 className="font-bold text-gray-900">Enquetes (Poll)</h3>
               </div>
@@ -82,6 +107,8 @@ export default function DisparosPage() {
               </div>
             </div>
           </div>
+
+          {openGemini && <GeminiConfigModal open={openGemini} onClose={() => setOpenGemini(false)} />}
 
           <div className="border-2 border-dashed border-gray-300 rounded p-6">
             <div className="flex items-center gap-3 mb-3">
