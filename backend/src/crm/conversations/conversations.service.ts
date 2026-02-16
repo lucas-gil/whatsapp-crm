@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppService } from '../../whatsapp/whatsapp.service';
+import { Logger } from '../../common/utils/logger.util';
 
 @Injectable()
 export class ConversationsService {
+  private logger = new Logger('ConversationsService');
   constructor(
     private prisma: PrismaService,
     private whatsAppService: WhatsAppService,
@@ -76,6 +78,8 @@ export class ConversationsService {
           data: { status: 'SENT' },
         });
       } catch (error) {
+        this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${error?.message || error}`);
+        this.logger.error(error?.stack || error);
         await this.prisma.message.update({
           where: { id: message.id },
           data: { status: 'FAILED' },
