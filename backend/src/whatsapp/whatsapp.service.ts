@@ -7,6 +7,7 @@ import { Logger } from '../common/utils/logger.util';
 import { WhatsAppProvider } from './providers/whatsapp.provider.interface';
 import { WhatsAppWebQRProvider } from './providers/whatsapp-web-qr.provider';
 import { WhatsAppCloudAPIProvider } from './providers/whatsapp-cloud-api.provider';
+import { GeminiService } from '../gemini/gemini.service';
 
 @Injectable()
 export class WhatsAppService {
@@ -21,6 +22,7 @@ export class WhatsAppService {
     private prisma: PrismaService,
     private webQRProvider: WhatsAppWebQRProvider,
     private cloudAPIProvider: WhatsAppCloudAPIProvider,
+    private geminiService: GeminiService,
   ) {
     const providerType = this.configService.get('WHATSAPP_PROVIDER', 'web-qr');
     this.defaultProvider =
@@ -902,6 +904,49 @@ export class WhatsAppService {
       });
 
       this.logger.info(`✅ Mensagem salva: ${messageId}`);
+
+      // Se Gemini estiver ativa, gerar resposta automática (opcional)
+      try {
+        const geminiSettings = await this.geminiService.getSettings(workspaceId);
+        const leadOptIn = lead.optIn !== false; // default true
+
+        if (geminiSettings?.isEnabled && geminiSettings?.respondToAllMessages && leadOptIn) {
+          // montar histórico de mensagens (últimas 50)
+          const history = await this.prisma.message.findMany({
+            where: { conversationId: conversation.id },
+            orderBy: { createdAt: 'asc' },
+            take: 50,
+          });
+
+          const messageHistory = history.map((m) => ({
+            role: m.direction === 'INCOMING' ? 'user' : 'assistant',
+            content: m.text || '',
+          }));
+
+          const aiReply = await this.geminiService.generateReply(
+            workspaceId,
+            lead.name,
+            messageHistory,
+          );
+
+          if (aiReply) {
+            const targetJid = this.resolveTargetJid(workspaceId, normalizedFrom);
+            const sendRes = await this.sendText(workspaceId, targetJid, aiReply);
+
+            // Marcar a mensagem enviada como processada pela IA
+            try {
+              await this.prisma.message.updateMany({
+                where: { whatsappMessageId: sendRes.messageId, workspaceId },
+                data: { wasProcessedByAI: true, aiResponse: aiReply },
+              });
+            } catch (err) {
+              this.logger.warn('Nao foi possivel marcar mensagem como processada pela IA');
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.error('Erro ao processar com Gemini:', err);
+      }
 
       await this.handleAutoPollStart(workspaceId, phoneNumber, normalizedFrom);
       await this.handlePollResponse(workspaceId, phoneNumber, text, normalizedFrom);
