@@ -80,7 +80,7 @@ export class ConversationsService {
       } catch (error) {
         if (error instanceof Error) {
           this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${error.message}`);
-          this.logger.error(error.stack || error);
+          this.logger.error(error.stack ? error.stack : String(error));
         } else {
           this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${JSON.stringify(error)}`);
         }
