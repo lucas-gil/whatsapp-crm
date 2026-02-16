@@ -958,7 +958,7 @@ export class WhatsAppService {
         },
         data: {
           status: 'SENT',
-          updatedAt: new Date(timestamp),
+          updatedAt: this.normalizeTimestamp(timestamp),
         },
       });
     } catch (error) {
