@@ -74,53 +74,15 @@ export class WhatsAppService {
    */
   async getQRCode(workspaceId: string): Promise<string | null> {
     this.logger.info(`🔍 Obtendo QR Code para ${workspaceId}`);
-    // Cria um registro de destinatario antes do envio para evitar reenvios concorrentes.
-    // Marcamos como SENT temporariamente; se o envio falhar atualizamos para FAILED para permitir nova tentativa.
-    const recipient = await this.prisma.pollRecipient.create({
-      data: {
-        campaignId: campaign.id,
-        targetJid: fromJid,
-        phoneNumber,
-        targetType: 'contact',
-        status: 'SENT',
-        sentAt: new Date(),
-      },
-    });
+    const qr = await this.defaultProvider.getQRCode(workspaceId);
 
-    try {
-      const messageId = await this.sendPollCampaignMessage(
-        workspaceId,
-        campaign,
-        this.resolveTargetJid(workspaceId, fromJid),
-        phoneNumber,
-      );
-
-      await this.prisma.pollRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          pollMessageId: messageId,
-          status: 'SENT',
-          sentAt: new Date(),
-        },
-      });
-    } catch (error) {
-      this.logger.error('Erro ao enviar poll autoStart:', error);
-      await this.prisma.pollRecipient.update({
-        where: { id: recipient.id },
-        data: { status: 'FAILED' },
-      });
-    }
-    if (isConnected) {
-      await this.prisma.whatsAppSettings.update({
-        where: { workspaceId },
-        data: {
-          isConnected: true,
-          lastConnectedAt: new Date(),
-        },
-      });
+    if (!qr) {
+      this.logger.warn(`⚠️ QR Code não disponível para ${workspaceId}`);
+    } else {
+      this.logger.info(`✅ QR Code obtido para ${workspaceId}`);
     }
 
-    return isConnected;
+    return qr;
   }
 
   /**
