@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 
-const GeminiConfigModal = dynamic(() => import('@/src/components/GeminiConfigModal'), { ssr: false });
+const GeminiConfigModal = dynamic(() => import('@/components/GeminiConfigModal'), { ssr: false });
 
 export default function DisparosPage() {
   const [openGemini, setOpenGemini] = useState(false);
