@@ -992,18 +992,44 @@ export class WhatsAppService {
               },
             });
 
-        await this.prisma.message.create({
-          data: {
-            conversationId: conversation.id,
+        // Tenta reaproveitar mensagem otimista (SENDING) se existir
+        const existingMsg = await this.prisma.message.findFirst({
+          where: {
             workspaceId,
-            whatsappMessageId: messageId,
+            conversationId: conversation.id,
             direction: 'OUTGOING',
-            text: text || `[${type}]`,
-            type,
-            status: 'SENT',
-            createdAt: new Date(),
+            status: 'SENDING',
           },
+          orderBy: { createdAt: 'desc' },
         });
+
+        if (existingMsg) {
+          await this.prisma.message.update({
+            where: { id: existingMsg.id },
+            data: {
+              whatsappMessageId: messageId,
+              status: 'SENT',
+              text: text || existingMsg.text || `[${type}]`,
+              type,
+              // Atualiza createdAt para hora real do envio (evita ordenacao incorreta)
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          await this.prisma.message.create({
+            data: {
+              conversationId: conversation.id,
+              workspaceId,
+              whatsappMessageId: messageId,
+              direction: 'OUTGOING',
+              text: text || `[${type}]`,
+              type,
+              status: 'SENT',
+              createdAt: new Date(),
+            },
+          });
+        }
 
         return conversation.id;
       }
@@ -1053,18 +1079,44 @@ export class WhatsAppService {
             },
           });
 
-      await this.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
+      // Reaproveitar mensagem otimista (SENDING) quando existir
+      const existingMsg = await this.prisma.message.findFirst({
+        where: {
           workspaceId,
-          whatsappMessageId: messageId,
+          conversationId: conversation.id,
           direction: 'OUTGOING',
-          text: text,
-          type: type,
-          status: 'SENT',
-          createdAt: new Date(),
+          status: 'SENDING',
         },
+        orderBy: { createdAt: 'desc' },
       });
+
+      if (existingMsg) {
+        await this.prisma.message.update({
+          where: { id: existingMsg.id },
+          data: {
+            whatsappMessageId: messageId,
+            status: 'SENT',
+            text: text || existingMsg.text,
+            type: type,
+            // Ajusta createdAt para refletir o momento do envio
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        await this.prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            workspaceId,
+            whatsappMessageId: messageId,
+            direction: 'OUTGOING',
+            text: text,
+            type: type,
+            status: 'SENT',
+            createdAt: new Date(),
+          },
+        });
+      }
 
       return conversation.id;
     } catch (error) {
