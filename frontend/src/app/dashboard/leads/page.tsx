@@ -579,15 +579,25 @@ export default function LeadsPage() {
 
     const text = messageInput.trim();
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
-    const targetValue =
+    let targetValue =
       selectedTarget.type === 'group'
         ? selectedTarget.jid || selectedTarget.id
         : selectedTarget.jid || selectedTarget.phoneNumber || '';
 
-    const isValidTarget =
-      targetValue.includes('@') || /^\d{8,}$/.test(targetValue);
+    // fallback: try to resolve phoneNumber from existing conversations if missing
+    if (!targetValue && selectedTarget.type === 'contact') {
+      const convo = conversationsByLeadId[selectedTarget.id] ||
+        (selectedTarget.phoneNumber ? conversationsByPhone[selectedTarget.phoneNumber] : undefined);
+      if (convo?.lead?.phoneNumber) {
+        targetValue = convo.lead.phoneNumber;
+        console.debug('Resolved targetValue from conversation', { targetValue, convoId: convo.id });
+      }
+    }
+
+    const isValidTarget = targetValue && (targetValue.includes('@') || /^\d{8,}$/.test(targetValue));
 
     if (!isValidTarget) {
+      console.debug('Invalid target for send', { targetValue, selectedTarget });
       setStatus('Contato sem numero do WhatsApp para envio');
       return;
     }
