@@ -563,9 +563,19 @@ export default function LeadsPage() {
   }, [pipeline]);
 
   const handleSendMessage = async () => {
-    if (!selectedTarget || !token) return;
-    if (!messageInput.trim() && !messageFile) return;
-    if (sending) return;
+    console.debug('handleSendMessage start', { selectedTarget, tokenPresent: !!token, messageInput, messageFile, sending });
+    if (!selectedTarget || !token) {
+      console.debug('handleSendMessage blocked: missing token or target', { selectedTarget, token });
+      return;
+    }
+    if (!messageInput.trim() && !messageFile) {
+      console.debug('handleSendMessage blocked: empty message and no file');
+      return;
+    }
+    if (sending) {
+      console.debug('handleSendMessage blocked: already sending');
+      return;
+    }
 
     const text = messageInput.trim();
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
@@ -618,6 +628,7 @@ export default function LeadsPage() {
         });
 
         if (!response.ok) {
+          console.debug('send-media response not ok', { status: response.status });
           setStatus('Nao foi possivel enviar o arquivo');
         }
       } else {
@@ -631,6 +642,7 @@ export default function LeadsPage() {
         });
 
         if (!response.ok) {
+          console.debug('send-text response not ok', { status: response.status });
           setStatus('Nao foi possivel enviar a mensagem');
         }
       }
@@ -657,6 +669,7 @@ export default function LeadsPage() {
         }
       }
     } catch (err) {
+      console.error('handleSendMessage error', err);
       setStatus('Erro ao enviar mensagem');
     } finally {
       setMessageFile(null);
