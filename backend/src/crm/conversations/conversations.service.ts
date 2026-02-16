@@ -78,8 +78,12 @@ export class ConversationsService {
           data: { status: 'SENT' },
         });
       } catch (error) {
-        this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${error?.message || error}`);
-        this.logger.error(error?.stack || error);
+        if (error instanceof Error) {
+          this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${error.message}`);
+          this.logger.error(error.stack || error);
+        } else {
+          this.logger.error(`Erro ao enviar mensagem WhatsApp para ${to}: ${JSON.stringify(error)}`);
+        }
         await this.prisma.message.update({
           where: { id: message.id },
           data: { status: 'FAILED' },
