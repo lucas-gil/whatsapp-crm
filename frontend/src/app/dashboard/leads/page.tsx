@@ -170,7 +170,7 @@ export default function LeadsPage() {
   const fetchLeads = async (headers: Record<string, string>) => {
     const [contactsResponse, leadsResponse] = await Promise.all([
       fetch(`${api}/whatsapp/contacts`, { headers }),
-      fetch('/api/crm/leads', { headers }),
+      fetch(`${api}/crm/leads`, { headers }),
     ]);
 
     let contactsList: any[] = [];
@@ -250,7 +250,7 @@ export default function LeadsPage() {
   };
 
   const fetchConversations = async (headers: Record<string, string>) => {
-    const response = await fetch('/api/crm/conversations', { headers });
+    const response = await fetch(`${api}/crm/conversations`, { headers });
     if (!response.ok) {
       setError('Erro ao carregar conversas');
       return [] as Conversation[];
@@ -301,7 +301,7 @@ export default function LeadsPage() {
   ) => {
     if (!token) return;
     try {
-      await fetch(`/api/crm/conversations/${conversationId}/read`, {
+      await fetch(`${api}/crm/conversations/${conversationId}/read`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -318,7 +318,7 @@ export default function LeadsPage() {
   const updateLead = async (leadId: string, data: Partial<Lead>) => {
     if (!token) return;
     try {
-      await fetch(`/api/crm/leads/${leadId}`, {
+      await fetch(`${api}/crm/leads/${leadId}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -336,7 +336,7 @@ export default function LeadsPage() {
     targetKey: string,
   ) => {
     if (!token) return;
-    const response = await fetch(`/api/crm/conversations/${conversationId}`, {
+    const response = await fetch(`${api}/crm/conversations/${conversationId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) return;
