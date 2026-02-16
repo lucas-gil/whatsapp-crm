@@ -80,6 +80,12 @@ const emojiList = [
 
 export default function LeadsPage() {
   const { token } = useAuth();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -148,7 +154,7 @@ export default function LeadsPage() {
   const fetchSelfProfilePicture = async () => {
     if (!token || selfAvatarUrl) return;
     try {
-      const response = await fetch('/api/whatsapp/profile-picture?to=me', {
+      const response = await fetch(`${api}/whatsapp/profile-picture?to=me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) return;
@@ -163,7 +169,7 @@ export default function LeadsPage() {
 
   const fetchLeads = async (headers: Record<string, string>) => {
     const [contactsResponse, leadsResponse] = await Promise.all([
-      fetch('/api/whatsapp/contacts', { headers }),
+      fetch(`${api}/whatsapp/contacts`, { headers }),
       fetch('/api/crm/leads', { headers }),
     ]);
 
@@ -404,7 +410,7 @@ export default function LeadsPage() {
 
     try {
       const response = await fetch(
-        `/api/whatsapp/profile-picture?to=${encodeURIComponent(value)}`,
+        `${api}/whatsapp/profile-picture?to=${encodeURIComponent(value)}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!response.ok) {
@@ -423,7 +429,7 @@ export default function LeadsPage() {
   };
 
   const fetchGroups = async (headers: Record<string, string>) => {
-    const groupsResponse = await fetch('/api/whatsapp/groups', { headers });
+    const groupsResponse = await fetch(`${api}/whatsapp/groups`, { headers });
     if (!groupsResponse.ok) {
       setError('Erro ao carregar grupos');
       return [] as Group[];
@@ -441,7 +447,7 @@ export default function LeadsPage() {
     setSyncAttempted(true);
 
     try {
-      const response = await fetch('/api/whatsapp/sync-contacts', {
+      const response = await fetch(`${api}/whatsapp/sync-contacts`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -603,7 +609,7 @@ export default function LeadsPage() {
           formData.append('caption', text);
         }
 
-        const response = await fetch('/api/whatsapp/send-media', {
+        const response = await fetch(`${api}/whatsapp/send-media`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -615,7 +621,7 @@ export default function LeadsPage() {
           setStatus('Nao foi possivel enviar o arquivo');
         }
       } else {
-        const response = await fetch('/api/whatsapp/send-text', {
+        const response = await fetch(`${api}/whatsapp/send-text`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,

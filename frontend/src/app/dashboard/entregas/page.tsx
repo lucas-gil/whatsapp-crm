@@ -89,6 +89,12 @@ const deliveryStatusOptions = [
 
 export default function EntregasPage() {
   const { token } = useAuth();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase
+    ? apiBase.replace(/\/$/, '')
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}/api`
+      : 'http://localhost:3000';
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -140,8 +146,8 @@ export default function EntregasPage() {
         fetch('/api/crm/inventory', { headers }),
         fetch('/api/crm/orders', { headers }),
         fetch('/api/crm/leads', { headers }),
-        fetch('/api/whatsapp/contacts', { headers }),
-        fetch('/api/whatsapp/groups', { headers }),
+        fetch(`${api}/whatsapp/contacts`, { headers }),
+        fetch(`${api}/whatsapp/groups`, { headers }),
       ]);
 
       if (productsRes.ok) {
