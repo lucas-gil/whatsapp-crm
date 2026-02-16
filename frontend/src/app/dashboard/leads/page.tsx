@@ -669,6 +669,7 @@ export default function LeadsPage() {
       }
 
       const refreshed = await fetchConversations({ Authorization: `Bearer ${token}` });
+      console.debug('refreshed conversations count', Array.isArray(refreshed) ? refreshed.length : typeof refreshed, refreshed?.slice?.(0,5));
 
       if (selectedTarget.type === 'contact') {
         const convo = refreshed.find(
@@ -676,6 +677,7 @@ export default function LeadsPage() {
             item.leadId === selectedTarget.id ||
             (selectedTarget.phoneNumber && item.lead?.phoneNumber === selectedTarget.phoneNumber),
         );
+        console.debug('found convo for contact', { convo });
         if (convo?.id) {
           setSelectedConversationId(convo.id);
           await loadConversationMessages(convo.id, key);
@@ -684,6 +686,7 @@ export default function LeadsPage() {
 
       if (selectedTarget.type === 'group') {
         const convo = refreshed.find((item) => item.groupId === selectedTarget.id);
+        console.debug('found convo for group', { convo });
         if (convo?.id) {
           setSelectedConversationId(convo.id);
           await loadConversationMessages(convo.id, key);
