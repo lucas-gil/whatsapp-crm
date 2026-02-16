@@ -457,7 +457,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     this.logger.info(`Desconectado: ${workspaceId}`);
   }
 
-  async sendText(workspaceId: string, to: string, text: string): Promise<string> {
+  async sendText(workspaceId: string, to: string, text: string): Promise<{ messageId: string; timestamp?: number }> {
     const socket = this.sessions.get(workspaceId);
     if (!socket?.user) {
       throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
@@ -495,7 +495,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     fileName: string,
     mimeType: string,
     caption?: string,
-  ): Promise<string> {
+  ): Promise<{ messageId: string; timestamp?: number }> {
     const socket = this.sessions.get(workspaceId);
     if (!socket?.user) {
       throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
@@ -529,7 +529,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     to: string,
     question: string,
     options: string[],
-  ): Promise<string> {
+  ): Promise<{ messageId: string; timestamp?: number }> {
     const socket = this.sessions.get(workspaceId);
     if (!socket?.user) {
       throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);

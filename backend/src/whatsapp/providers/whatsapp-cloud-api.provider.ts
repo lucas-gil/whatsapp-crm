@@ -57,7 +57,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     workspaceId: string,
     to: string,
     text: string,
-  ): Promise<string> {
+  ): Promise<{ messageId: string; timestamp?: number }> {
     // TODO: Implementar chamada para Cloud API
     // POST /v18.0/{PHONE_ID}/messages
     this.logger.info(`[STUB] Enviando mensagem para ${to}: ${text}`);
@@ -71,7 +71,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     fileName: string,
     mimeType: string,
     caption?: string,
-  ): Promise<string> {
+  ): Promise<{ messageId: string; timestamp?: number }> {
     // TODO: Upload mídia e enviar via Cloud API
     this.logger.info(`[STUB] Enviando mídia para ${to}: ${fileName}`);
     return { messageId: 'msg_' + Date.now(), timestamp: Date.now() };
@@ -82,7 +82,7 @@ export class WhatsAppCloudAPIProvider implements WhatsAppProvider {
     to: string,
     question: string,
     options: string[],
-  ): Promise<string> {
+  ): Promise<{ messageId: string; timestamp?: number }> {
     // Cloud API suporta polls nativos
     this.logger.info(
       `[STUB] Enviando enquete para ${to}: ${question}`,

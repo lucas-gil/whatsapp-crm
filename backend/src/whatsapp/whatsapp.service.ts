@@ -85,6 +85,26 @@ export class WhatsAppService {
     return qr;
   }
 
+  async isConnected(workspaceId: string): Promise<boolean> {
+    try {
+      // Prefer DB state when possible
+      const settings = await this.prisma.whatsAppSettings.findUnique({ where: { workspaceId } });
+      if (settings?.isConnected) return true;
+    } catch (err) {
+      // ignore
+    }
+
+    if (this.defaultProvider && typeof this.defaultProvider.isConnected === 'function') {
+      try {
+        return await this.defaultProvider.isConnected(workspaceId);
+      } catch (err) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   /**
    * Desconectar
    */
@@ -958,7 +978,7 @@ export class WhatsAppService {
     timestamp?: number | Date | null,
   ): Promise<string | null> {
     try {
-      const messageDate = this.normalizeTimestamp(timestamp ?? new Date());
+      let messageDate = this.normalizeTimestamp(timestamp ?? new Date());
 
       if (to.endsWith('@g.us')) {
         let group = await this.prisma.group.findFirst({
@@ -1067,7 +1087,7 @@ export class WhatsAppService {
           groupId: null,
         },
       });
-      const messageDate = this.normalizeTimestamp(timestamp ?? new Date());
+      messageDate = this.normalizeTimestamp(timestamp ?? new Date());
 
       const conversation = existingConversation
         ? await this.prisma.conversation.update({
