@@ -594,10 +594,9 @@ export default function LeadsPage() {
       }
     }
 
-    const isValidTarget = targetValue && (targetValue.includes('@') || /^\d{8,}$/.test(targetValue));
-
-    if (!isValidTarget) {
-      console.debug('Invalid target for send', { targetValue, selectedTarget });
+    // Accept any non-empty targetValue. backend will resolve JID/phone when possible.
+    if (!targetValue) {
+      console.debug('Invalid target for send: empty targetValue', { targetValue, selectedTarget });
       setStatus('Contato sem numero do WhatsApp para envio');
       return;
     }
