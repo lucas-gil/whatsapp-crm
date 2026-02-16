@@ -153,10 +153,10 @@ export class WhatsAppService {
       throw lastError;
     }
 
-    // Registrar no banco
-    await this.logMessage(workspaceId, usedTarget, text, 'text', messageId);
+    // Registrar no banco (retorna conversationId quando possível)
+    const conversationId = await this.logMessage(workspaceId, usedTarget, text, 'text', messageId);
 
-    return { messageId, status: 'sent', timestamp: new Date() };
+    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
   }
 
   /**
@@ -204,7 +204,7 @@ export class WhatsAppService {
       throw lastError;
     }
 
-    await this.logMessage(
+    const conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       caption || fileName,
@@ -212,7 +212,7 @@ export class WhatsAppService {
       messageId,
     );
 
-    return { messageId, status: 'sent', timestamp: new Date() };
+    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
   }
 
   /**
@@ -256,9 +256,9 @@ export class WhatsAppService {
       throw lastError;
     }
 
-    await this.logMessage(workspaceId, usedTarget, question, 'poll', messageId);
+    const conversationId = await this.logMessage(workspaceId, usedTarget, question, 'poll', messageId);
 
-    return { messageId, status: 'sent', timestamp: new Date() };
+    return { messageId, status: 'sent', timestamp: new Date(), conversationId };
   }
 
   /**
@@ -951,7 +951,7 @@ export class WhatsAppService {
     text: string,
     type: string,
     messageId: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     try {
       if (to.endsWith('@g.us')) {
         let group = await this.prisma.group.findFirst({
@@ -1005,7 +1005,7 @@ export class WhatsAppService {
           },
         });
 
-        return;
+        return conversation.id;
       }
 
       const phoneNumber = this.normalizePhoneNumber(to);
@@ -1065,8 +1065,11 @@ export class WhatsAppService {
           createdAt: new Date(),
         },
       });
+
+      return conversation.id;
     } catch (error) {
       this.logger.error(`Erro ao logar mensagem:`, error);
+      return null;
     }
   }
 

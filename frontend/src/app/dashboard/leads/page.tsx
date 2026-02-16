@@ -640,12 +640,18 @@ export default function LeadsPage() {
           },
           body: formData,
         });
-        console.debug('send-media response', { status: response.status });
+        const mediaBody = await response.json().catch(() => null);
+        console.debug('send-media response', { status: response.status, body: mediaBody });
         if (!response.ok) {
-          let body = '';
-          try { body = await response.text(); } catch (e) {}
-          console.debug('send-media response body', body);
+          let txt = '';
+          try { txt = await response.text(); } catch (e) {}
+          console.debug('send-media response body (text fallback)', txt);
           setStatus('Nao foi possivel enviar o arquivo');
+        } else if (mediaBody?.conversationId) {
+          // Use returned conversationId to open the conversation immediately
+          const convoId = mediaBody.conversationId;
+          setSelectedConversationId(convoId);
+          await loadConversationMessages(convoId, key);
         }
       } else {
         const textUrl = `${api}/whatsapp/send-text`;
@@ -659,12 +665,17 @@ export default function LeadsPage() {
           },
           body: JSON.stringify(payload),
         });
-        console.debug('send-text response', { status: response.status });
+        const textBody = await response.json().catch(() => null);
+        console.debug('send-text response', { status: response.status, body: textBody });
         if (!response.ok) {
           let body = '';
           try { body = await response.text(); } catch (e) {}
           console.debug('send-text response body', body);
           setStatus('Nao foi possivel enviar a mensagem');
+        } else if (textBody?.conversationId) {
+          const convoId = textBody.conversationId;
+          setSelectedConversationId(convoId);
+          await loadConversationMessages(convoId, key);
         }
       }
 
