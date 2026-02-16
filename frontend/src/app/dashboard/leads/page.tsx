@@ -111,6 +111,7 @@ export default function LeadsPage() {
   const [messageInput, setMessageInput] = useState('');
   const [messageFile, setMessageFile] = useState<File | null>(null);
   const [messagesByTarget, setMessagesByTarget] = useState<Record<string, ChatMessage[]>>({});
+  const [messagesVisibleCount, setMessagesVisibleCount] = useState<number>(25);
   const [profilePhotos, setProfilePhotos] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -398,6 +399,8 @@ export default function LeadsPage() {
       ...prev,
       [targetKey]: mapped,
     }));
+    // Mostrar apenas as mensagens mais recentes inicialmente
+    setMessagesVisibleCount(Math.min(25, mapped.length));
   };
 
   const fetchProfilePicture = async (target: ConversationTarget) => {
@@ -781,6 +784,8 @@ export default function LeadsPage() {
         setMessagesByTarget((prev) => ({ ...prev, [targetKey]: [] }));
       }
     }
+    // reset visible messages when switching target
+    setMessagesVisibleCount(25);
   }, [selectedTarget, conversationsByLeadId, conversationsByGroupId]);
 
   useEffect(() => {
@@ -1155,29 +1160,52 @@ export default function LeadsPage() {
             <div
               ref={chatScrollRef}
               onScroll={handleChatScroll}
-              className="wa-chat-bg relative flex-1 p-6 space-y-4 overflow-auto"
+              className="wa-chat-bg relative flex-1 p-4 space-y-2 overflow-auto"
             >
               {selectedTarget && chatMessages.length === 0 && (
                 <p className="text-sm text-slate-400">Nenhuma mensagem ainda.</p>
               )}
-              {chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`max-w-[72%] rounded-2xl px-4 py-2 text-sm shadow ${
-                    message.from === 'me'
-                      ? 'bg-[#005c4b] text-white ml-auto'
-                      : 'bg-[#202c33] text-slate-100'
-                  }`}
-                >
-                  <p>{message.text}</p>
-                  <p className="mt-1 text-[10px] text-slate-300">
-                    {new Date(message.timestamp).toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-              ))}
+              {
+                // Mostrar apenas as ultimas `messagesVisibleCount` mensagens
+                (() => {
+                  const visible = chatMessages.slice(-messagesVisibleCount);
+                  const hasMore = chatMessages.length > visible.length;
+                  return (
+                    <>
+                      {hasMore && (
+                        <div className="w-full text-center">
+                          <button
+                            type="button"
+                            onClick={() => setMessagesVisibleCount((prev) => Math.min(prev + 25, chatMessages.length))}
+                            className="mx-auto mb-2 inline-block rounded-full border border-[#202c33] bg-[#111b21] px-3 py-1 text-xs text-slate-300"
+                          >
+                            Ver mais mensagens
+                          </button>
+                        </div>
+                      )}
+
+                      {visible.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`max-w-[72%] rounded-md px-3 py-1 text-xs ${
+                            message.from === 'me'
+                              ? 'bg-[#005c4b] text-white ml-auto'
+                              : 'bg-[#202c33] text-slate-100'
+                          }`}
+                        >
+                          <p className="leading-tight">{message.text}</p>
+                          <p className="mt-1 text-[10px] text-slate-300">
+                            {new Date(message.timestamp).toLocaleTimeString('pt-BR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()
+              }
               <div ref={chatEndRef} />
               {hasNewMessages && (
                 <button
