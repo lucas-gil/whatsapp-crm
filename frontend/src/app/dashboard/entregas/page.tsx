@@ -277,6 +277,14 @@ export default function EntregasPage() {
 
   const handleCreateOrder = async () => {
     if (!token || newOrder.items.length === 0) return;
+    // Validação extra: todos os itens devem ter productId preenchido e quantity > 0
+    const invalidItem = newOrder.items.find(
+      (item) => !item.productId || !item.quantity || item.quantity <= 0
+    );
+    if (invalidItem) {
+      setStatus('Preencha todos os itens do pedido corretamente (produto e quantidade > 0)');
+      return;
+    }
     setStatus('');
     try {
       const response = await fetch('/api/crm/orders', {
