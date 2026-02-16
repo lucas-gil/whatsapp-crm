@@ -42,6 +42,27 @@ export class GeminiService {
     return settings;
   }
 
+  async attachContextFile(workspaceId: string, file: Express.Multer.File) {
+    if (!file) throw new Error('Arquivo nao enviado');
+
+    const StorageUtilModule = require('../common/utils/storage.util');
+    const StorageUtil = StorageUtilModule.StorageUtil;
+    const storage = new StorageUtil({ provider: 'local', path: process.env.STORAGE_PATH || './storage' });
+
+    const saved = await storage.saveFile(file.buffer, `${workspaceId}-gemini-${Date.now()}-${file.originalname}`, 'gemini');
+
+    const settings = await this.prisma.geminiSettings.findUnique({ where: { workspaceId } });
+    const files = Array.isArray(settings?.contextFiles) ? [...settings!.contextFiles] : [];
+    files.push(saved.url || saved.path);
+
+    const updated = await this.prisma.geminiSettings.update({
+      where: { workspaceId },
+      data: { contextFiles: files },
+    });
+
+    return updated;
+  }
+
   async generateReply(
     workspaceId: string,
     leadName: string,

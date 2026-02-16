@@ -6,6 +6,8 @@ import {
   Request,
   Body,
 } from '@nestjs/common';
+import { UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { GeminiService } from './gemini.service';
 
 @Controller('settings/gemini')
@@ -30,5 +32,16 @@ export class GeminiController {
       [{ role: 'user', content: message }],
     );
     return { reply };
+  }
+
+  @Post('upload-context')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadContextFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
+  ) {
+    if (!file) throw new BadRequestException('Arquivo nao enviado');
+
+    return this.geminiService.attachContextFile(req.user.workspaceId, file);
   }
 }
