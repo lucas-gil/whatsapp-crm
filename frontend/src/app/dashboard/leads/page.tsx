@@ -631,30 +631,39 @@ export default function LeadsPage() {
           formData.append('caption', text);
         }
 
-        const response = await fetch(`${api}/whatsapp/send-media`, {
+        const mediaUrl = `${api}/whatsapp/send-media`;
+        console.debug('Sending media to', mediaUrl, { to: targetValue, caption: text, fileName: messageFile?.name });
+        const response = await fetch(mediaUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
           },
           body: formData,
         });
-
+        console.debug('send-media response', { status: response.status });
         if (!response.ok) {
-          console.debug('send-media response not ok', { status: response.status });
+          let body = '';
+          try { body = await response.text(); } catch (e) {}
+          console.debug('send-media response body', body);
           setStatus('Nao foi possivel enviar o arquivo');
         }
       } else {
-        const response = await fetch(`${api}/whatsapp/send-text`, {
+        const textUrl = `${api}/whatsapp/send-text`;
+        const payload = { to: targetValue, text };
+        console.debug('Sending text to', textUrl, { payload });
+        const response = await fetch(textUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ to: targetValue, text }),
+          body: JSON.stringify(payload),
         });
-
+        console.debug('send-text response', { status: response.status });
         if (!response.ok) {
-          console.debug('send-text response not ok', { status: response.status });
+          let body = '';
+          try { body = await response.text(); } catch (e) {}
+          console.debug('send-text response body', body);
           setStatus('Nao foi possivel enviar a mensagem');
         }
       }
