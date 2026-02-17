@@ -29,6 +29,31 @@ export class WhatsAppService {
       providerType === 'cloud-api' ? cloudAPIProvider : webQRProvider;
   }
 
+  private normalizeProviderTimestamp(ts: any): number | undefined {
+    if (!ts && ts !== 0) return undefined;
+    // Baileys/other libs sometimes return a Long-like object { low, high }
+    if (typeof ts === 'object') {
+      if (typeof ts.low === 'number') {
+        // assume seconds -> convert to ms
+        return Number(ts.low) * 1000;
+      }
+      if (typeof ts.toNumber === 'function') {
+        try {
+          const n = ts.toNumber();
+          // if looks like seconds (10 digits) convert to ms
+          return n < 1e12 ? n * 1000 : n;
+        } catch (e) {
+          return undefined;
+        }
+      }
+      return undefined;
+    }
+    const n = Number(ts);
+    if (Number.isNaN(n)) return undefined;
+    // heuristic: if seconds (<= 1e10) convert to ms
+    return n < 1e12 ? n * 1000 : n;
+  }
+
   /**
    * Inicializa a conexão WhatsApp
    */
@@ -148,6 +173,15 @@ export class WhatsAppService {
         } catch (e) {
           // ignore stringify errors
         }
+        // always compute and log a normalized timestamp (or 'unknown') to make ordering/debugging easier
+        try {
+          const rawTs = (res as any)?.timestamp;
+          const norm = this.normalizeProviderTimestamp(rawTs);
+          const normStr = norm ? new Date(norm).toISOString() : 'unknown';
+          this.logger.info(`Provider normalized timestamp for workspace=${workspaceId} target=${target}: ${normStr} (raw: ${JSON.stringify(rawTs)})`);
+        } catch (e) {
+          // ignore normalization logging errors
+        }
         messageId = (res as any)?.messageId || (res as any)?.id || (res as any)?.idMessage || String(res || '');
         if (!messageId) {
           const errMsg = `Provider did not return messageId for target=${target}`;
@@ -169,6 +203,8 @@ export class WhatsAppService {
       throw lastError;
     }
 
+    // Normalize timestamp from provider (handle Long-like objects / seconds)
+    const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
     // Registrar no banco (retorna conversationId quando possível)
     const conversationId = await this.logMessage(
       workspaceId,
@@ -176,10 +212,10 @@ export class WhatsAppService {
       text,
       'text',
       messageId,
-      usedTimestamp,
+      normalizedTs,
     );
 
-    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }
 
   /**
@@ -230,16 +266,18 @@ export class WhatsAppService {
       throw lastError;
     }
 
+    // Normalize timestamp and persist
+    const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
     const conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       caption || fileName,
       'media',
       messageId,
-      usedTimestamp,
+      normalizedTs,
     );
 
-    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }
 
   /**
@@ -286,16 +324,18 @@ export class WhatsAppService {
       throw lastError;
     }
 
+    // Normalize timestamp and persist
+    const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
     const conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       question,
       'poll',
       messageId,
-      usedTimestamp,
+      normalizedTs,
     );
 
-    return { messageId, status: 'sent', timestamp: usedTimestamp ? new Date(usedTimestamp) : new Date(), conversationId };
+    return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }
 
   /**
@@ -826,6 +866,29 @@ export class WhatsAppService {
               },
             });
 
+          // If provider already returned this messageId earlier, update that record instead of creating a duplicate
+          if (messageId) {
+            const existingByProvider = await this.prisma.message.findFirst({
+              where: { workspaceId, whatsappMessageId: messageId },
+            });
+            if (existingByProvider) {
+              await this.prisma.message.update({
+                where: { id: existingByProvider.id },
+                data: {
+                  conversationId: conversation.id,
+                  whatsappMessageId: messageId,
+                  status: 'SENT',
+                  text: text || existingByProvider.text || `[${type}]`,
+                  type,
+                  createdAt: messageDate,
+                  updatedAt: new Date(),
+                },
+              });
+              this.logger.info(`Message deduplicated (provider) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
+              return conversation.id;
+            }
+          }
+
         await this.prisma.message.create({
           data: {
             conversationId: conversation.id,
@@ -897,6 +960,29 @@ export class WhatsAppService {
               lastMessage: text || `[${type}]`,
             },
           });
+
+      // If provider already returned this messageId earlier, update that record instead of creating a duplicate
+      if (messageId) {
+        const existingByProvider = await this.prisma.message.findFirst({
+          where: { workspaceId, whatsappMessageId: messageId },
+        });
+        if (existingByProvider) {
+          await this.prisma.message.update({
+            where: { id: existingByProvider.id },
+            data: {
+              conversationId: conversation.id,
+              whatsappMessageId: messageId,
+              status: 'SENT',
+              text: text || existingByProvider.text || `[${type}]`,
+              type,
+              createdAt: messageDate,
+              updatedAt: new Date(),
+            },
+          });
+          this.logger.info(`Message deduplicated (provider) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
+          return conversation.id;
+        }
+      }
 
       // Criar mensagem
       await this.prisma.message.create({
@@ -1087,31 +1173,33 @@ export class WhatsAppService {
         });
 
         if (existingMsg) {
-          await this.prisma.message.update({
-            where: { id: existingMsg.id },
-            data: {
-              whatsappMessageId: messageId,
-              status: 'SENT',
-              text: text || existingMsg.text || `[${type}]`,
-              type,
-              // Atualiza createdAt para hora real do envio (evita ordenacao incorreta)
-              createdAt: messageDate,
-              updatedAt: new Date(),
-            },
-          });
+            await this.prisma.message.update({
+              where: { id: existingMsg.id },
+              data: {
+                whatsappMessageId: messageId,
+                status: 'SENT',
+                text: text || existingMsg.text || `[${type}]`,
+                type,
+                // Atualiza createdAt para hora real do envio (evita ordenacao incorreta)
+                createdAt: messageDate,
+                updatedAt: new Date(),
+              },
+            });
+            this.logger.info(`Message updated (reused optimistic) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
         } else {
-          await this.prisma.message.create({
-            data: {
-              conversationId: conversation.id,
-              workspaceId,
-              whatsappMessageId: messageId,
-              direction: 'OUTGOING',
-              text: text || `[${type}]`,
-              type,
-              status: 'SENT',
-              createdAt: messageDate,
-            },
-          });
+            await this.prisma.message.create({
+              data: {
+                conversationId: conversation.id,
+                workspaceId,
+                whatsappMessageId: messageId,
+                direction: 'OUTGOING',
+                text: text || `[${type}]`,
+                type,
+                status: 'SENT',
+                createdAt: messageDate,
+              },
+            });
+            this.logger.info(`Message created whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
         }
 
         return conversation.id;
@@ -1187,6 +1275,7 @@ export class WhatsAppService {
             updatedAt: new Date(),
           },
         });
+        this.logger.info(`Message updated (reused optimistic) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
       } else {
         await this.prisma.message.create({
           data: {
@@ -1200,6 +1289,7 @@ export class WhatsAppService {
             createdAt: messageDate,
           },
         });
+        this.logger.info(`Message created whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
       }
 
       return conversation.id;
