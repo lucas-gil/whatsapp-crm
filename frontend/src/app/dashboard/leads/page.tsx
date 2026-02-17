@@ -33,6 +33,7 @@ type ChatMessage = {
   from: 'lead' | 'me';
   text: string;
   timestamp: string;
+  serverMessageId?: string;
 };
 
 type Conversation = {
@@ -359,6 +360,7 @@ export default function LeadsPage() {
         from: message.direction === 'OUTGOING' ? 'me' : 'lead',
         text: message.text || attachmentLabel || `[${message.type}]`,
         timestamp: message.createdAt,
+        serverMessageId: message.id,
       } as ChatMessage;
     });
 
@@ -395,10 +397,28 @@ export default function LeadsPage() {
       initializedTargetsRef.current.add(targetKey);
     }
 
-    setMessagesByTarget((prev) => ({
-      ...prev,
-      [targetKey]: mapped,
-    }));
+    setMessagesByTarget((prev) => {
+      const existing = prev[targetKey] || [];
+      const pendingOptimistic = existing.filter((m) => !m.serverMessageId && m.from === 'me');
+
+      const merged = mapped.map((m: ChatMessage) => {
+        const found = existing.find((e) => e.serverMessageId && String(e.serverMessageId) === String(m.serverMessageId));
+        if (found) {
+          return {
+            ...m,
+            text: found.text || m.text,
+            timestamp: found.timestamp || m.timestamp,
+            serverMessageId: m.serverMessageId,
+          } as ChatMessage;
+        }
+        return { ...m, serverMessageId: m.serverMessageId } as ChatMessage;
+      });
+
+      // append any optimistic messages that are still pending (no serverMessageId)
+      const pendingToAdd = pendingOptimistic.filter((p) => !merged.some((mm: ChatMessage) => mm.id === p.id));
+
+      return { ...prev, [targetKey]: [...merged, ...pendingToAdd] };
+    });
     // Mostrar apenas as mensagens mais recentes inicialmente
     setMessagesVisibleCount(Math.min(25, mapped.length));
   };
@@ -611,8 +631,9 @@ export default function LeadsPage() {
       ? text || `[Arquivo] ${messageFile.name}`
       : text;
 
+    const optimisticId = `${selectedTarget.id}-${Date.now()}`;
     const newMessage: ChatMessage = {
-      id: `${selectedTarget.id}-${Date.now()}`,
+      id: optimisticId,
       from: 'me',
       text: optimisticText,
       timestamp: new Date().toISOString(),
@@ -651,9 +672,24 @@ export default function LeadsPage() {
           console.debug('send-media response body (text fallback)', txt);
           setStatus('Nao foi possivel enviar o arquivo');
         } else if (mediaBody?.conversationId) {
-          // Use returned conversationId to open the conversation immediately
           const convoId = mediaBody.conversationId;
           setSelectedConversationId(convoId);
+          // update optimistic message timestamp/messageId if provider returned them
+          if (mediaBody?.timestamp) {
+            try {
+              const normalized = new Date(mediaBody.timestamp).toISOString();
+              setMessagesByTarget((prev) => {
+                const list = [...(prev[key] || [])];
+                const idx = list.findIndex((m) => m.id === optimisticId);
+                if (idx >= 0) {
+                  list[idx] = { ...list[idx], timestamp: normalized, serverMessageId: mediaBody.messageId || list[idx].serverMessageId } as ChatMessage;
+                }
+                return { ...prev, [key]: list };
+              });
+            } catch (e) {
+              // ignore invalid timestamp
+            }
+          }
           await loadConversationMessages(convoId, key);
         }
       } else {
@@ -678,6 +714,22 @@ export default function LeadsPage() {
         } else if (textBody?.conversationId) {
           const convoId = textBody.conversationId;
           setSelectedConversationId(convoId);
+          // update optimistic message timestamp/messageId if provider returned them
+          if (textBody?.timestamp) {
+            try {
+              const normalized = new Date(textBody.timestamp).toISOString();
+              setMessagesByTarget((prev) => {
+                const list = [...(prev[key] || [])];
+                const idx = list.findIndex((m) => m.id === optimisticId);
+                if (idx >= 0) {
+                  list[idx] = { ...list[idx], timestamp: normalized, serverMessageId: textBody.messageId || list[idx].serverMessageId } as ChatMessage;
+                }
+                return { ...prev, [key]: list };
+              });
+            } catch (e) {
+              // ignore invalid timestamp
+            }
+          }
           await loadConversationMessages(convoId, key);
         }
       }
