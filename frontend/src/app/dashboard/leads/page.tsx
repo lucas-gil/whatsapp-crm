@@ -637,6 +637,9 @@ export default function LeadsPage() {
       return;
     }
 
+    // Debug: log resolved target and payload before sending (temporary)
+    console.debug('DEBUG send target', { targetValue, selectedTarget, key });
+
     const optimisticText = messageFile
       ? text || `[Arquivo] ${messageFile.name}`
       : text;
