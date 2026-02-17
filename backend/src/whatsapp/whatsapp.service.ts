@@ -885,7 +885,7 @@ export class WhatsAppService {
                 },
               });
               this.logger.info(`Message deduplicated (provider) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
-              return conversation.id;
+              return;
             }
           }
 
@@ -980,7 +980,7 @@ export class WhatsAppService {
             },
           });
           this.logger.info(`Message deduplicated (provider) whatsappMessageId=${messageId} workspace=${workspaceId} conversation=${conversation.id}`);
-          return conversation.id;
+          return;
         }
       }
 
