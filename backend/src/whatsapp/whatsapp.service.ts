@@ -206,7 +206,7 @@ export class WhatsAppService {
     // Normalize timestamp from provider (handle Long-like objects / seconds)
     const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
     // Registrar no banco (retorna conversationId quando possível)
-    const conversationId = await this.logMessage(
+    let conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       text,
@@ -214,6 +214,18 @@ export class WhatsAppService {
       messageId,
       normalizedTs,
     );
+    // Fallback: if logMessage didn't return a conversationId, try to look it up by whatsappMessageId
+    if (!conversationId) {
+      try {
+        const msg = await this.prisma.message.findFirst({ where: { workspaceId, whatsappMessageId: messageId } });
+        if (msg?.conversationId) {
+          conversationId = msg.conversationId;
+          this.logger.info(`Fallback resolved conversationId=${conversationId} for whatsappMessageId=${messageId}`);
+        }
+      } catch (e) {
+        // ignore DB lookup errors for fallback
+      }
+    }
 
     return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }
@@ -268,7 +280,7 @@ export class WhatsAppService {
 
     // Normalize timestamp and persist
     const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
-    const conversationId = await this.logMessage(
+    let conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       caption || fileName,
@@ -276,6 +288,15 @@ export class WhatsAppService {
       messageId,
       normalizedTs,
     );
+    if (!conversationId) {
+      try {
+        const msg = await this.prisma.message.findFirst({ where: { workspaceId, whatsappMessageId: messageId } });
+        if (msg?.conversationId) {
+          conversationId = msg.conversationId;
+          this.logger.info(`Fallback resolved conversationId=${conversationId} for whatsappMessageId=${messageId}`);
+        }
+      } catch (e) {}
+    }
 
     return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }
@@ -326,7 +347,7 @@ export class WhatsAppService {
 
     // Normalize timestamp and persist
     const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
-    const conversationId = await this.logMessage(
+    let conversationId = await this.logMessage(
       workspaceId,
       usedTarget,
       question,
@@ -334,6 +355,15 @@ export class WhatsAppService {
       messageId,
       normalizedTs,
     );
+    if (!conversationId) {
+      try {
+        const msg = await this.prisma.message.findFirst({ where: { workspaceId, whatsappMessageId: messageId } });
+        if (msg?.conversationId) {
+          conversationId = msg.conversationId;
+          this.logger.info(`Fallback resolved conversationId=${conversationId} for whatsappMessageId=${messageId}`);
+        }
+      } catch (e) {}
+    }
 
     return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
   }

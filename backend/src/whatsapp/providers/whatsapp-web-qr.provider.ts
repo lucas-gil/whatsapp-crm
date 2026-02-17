@@ -180,9 +180,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           this.logger.warn(`❌ Desconectado (${reason}): ${workspaceId}`);
           if (lastDisconnect?.error) {
             const lastError: any = lastDisconnect.error;
-            this.logger.warn(
-              `❌ Detalhes do disconnect: ${lastError?.message || 'sem mensagem'} | status=${lastError?.output?.statusCode || 'n/a'}`,
-            );
+            try {
+              const statusCode = lastError?.output?.statusCode || 'n/a';
+              const errMsg = lastError?.message || JSON.stringify(lastError).slice(0, 200);
+              const errStack = lastError?.stack ? String(lastError.stack).substring(0, 800) : '';
+              this.logger.warn(`❌ Detalhes do disconnect: ${errMsg} | status=${statusCode}`);
+              if (errStack) this.logger.debug(`❌ Disconnect stack (truncated): ${errStack}`);
+            } catch (e) {
+              this.logger.warn('❌ Detalhes do disconnect: (erro ao serializar)');
+            }
           }
           this.emitEvent(workspaceId, 'connection_status', {
             status: 'disconnected',
@@ -200,8 +206,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             const retryCount = this.connectionRetries.get(workspaceId) || 0;
             const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 60000); // Max 60s (era 30s)
             this.logger.info(`⏳ Reconectando em ${retryDelay}ms (tentativa ${retryCount + 1}/10)...`);
-            
-            setTimeout(() => this.initSession(workspaceId), retryDelay);
+            this.logger.debug(`Connection retry state for ${workspaceId}: retryCount=${retryCount}, willRetry=${true}`);
+
+            setTimeout(() => {
+              this.logger.info(`🔁 Iniciando tentativa de reconexão para ${workspaceId} (antes de chamar initSession)`);
+              this.initSession(workspaceId).catch(err => {
+                this.logger.error(`❌ Erro na tentativa de reconexão initSession for ${workspaceId}: ${err?.message || String(err)}`);
+              });
+            }, retryDelay);
             this.connectionRetries.set(workspaceId, Math.min(retryCount + 1, 10)); // 10 tentativas (era 5)
           } else {
             this.sessions.delete(workspaceId);
@@ -465,7 +477,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
     try {
       const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-      const response = await socket.sendMessage(jid, { text });
+      const response = await this.sendMessageWithRetries(socket, jid, { text });
       const messageId = response.key.id;
       // Tenta extrair timestamp retornado pelo Baileys
       const ts =
@@ -513,7 +525,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         messagePayload.caption = caption;
       }
 
-      const response = await socket.sendMessage(jid, messagePayload);
+      const response = await this.sendMessageWithRetries(socket, jid, messagePayload);
       const messageId = response.key.id;
       const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
       this.logger.info(`📎 Mídia enviada para ${to}: ${messageId} (ts=${ts})`);
@@ -540,7 +552,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(
         `🧪 Enviando enquete: jid=${jid} options=${options.length} question=${question.substring(0, 40)}`,
       );
-      const response = await socket.sendMessage(jid, {
+      const response = await this.sendMessageWithRetries(socket, jid, {
         poll: {
           name: question,
           values: options,
@@ -554,6 +566,39 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.error(`Erro ao enviar enquete para ${to}:`, error);
       throw error;
     }
+  }
+
+  // Wrapper para enviar mensagens com retries/backoff tratando timeouts transitórios do Baileys
+  private async sendMessageWithRetries(socket: any, jid: string, payload: any, maxAttempts = 3): Promise<any> {
+    let attempt = 0;
+    let lastError: any = null;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        this.logger.debug(`Tentativa de envio ${attempt}/${maxAttempts} para ${jid}`);
+        const res = await socket.sendMessage(jid, payload);
+        return res;
+      } catch (err: any) {
+        lastError = err;
+        const msg = err?.message || (err?.output && err.output.payload && err.output.payload.message) || String(err);
+        // Se timeout, aplicamos backoff e tentamos novamente
+        if (/(timed out|Timed Out|Request Time-out|408)/i.test(msg)) {
+          const delay = 500 * Math.pow(2, attempt - 1); // 500ms, 1000ms, 2000ms
+          this.logger.warn(`Timed out ao enviar para ${jid} (tentativa ${attempt}). Aguardando ${delay}ms antes de retry.`);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+
+        // Para outros tipos de erro, não retry (mas logamos detalhes)
+        this.logger.error(`Erro ao enviar para ${jid} (não-retry): ${msg}`);
+        throw err;
+      }
+    }
+
+    // Após tentativas, lançar último erro
+    this.logger.error(`Falha depois de ${maxAttempts} tentativas ao enviar para ${jid}: ${lastError?.message || String(lastError)}`);
+    throw lastError;
   }
 
   async listGroups(workspaceId: string): Promise<any[]> {
