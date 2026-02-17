@@ -193,6 +193,14 @@ export class WhatsAppController {
   }
 
   /**
+   * Remover todas as mensagens OUTGOING deste workspace (limpeza administrativa)
+   */
+  @Post('cleanup-outgoing')
+  async cleanupOutgoing(@Request() req: any) {
+    return this.whatsAppService.deleteOutgoingMessages(req.user.workspaceId);
+  }
+
+  /**
    * Testar conexão
    */
   @Post('test')

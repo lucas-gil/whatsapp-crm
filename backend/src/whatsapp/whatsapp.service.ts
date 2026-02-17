@@ -581,12 +581,12 @@ export class WhatsAppService {
 
     const phones = new Set<string>();
     messagePhones.forEach((item) => {
-      if (item.senderPhoneNumber) {
+      if (item.senderPhoneNumber && this.isValidPhoneNumber(item.senderPhoneNumber)) {
         phones.add(item.senderPhoneNumber);
       }
     });
     providerContacts.forEach((contact) => {
-      if (contact?.phoneNumber) {
+      if (contact?.phoneNumber && this.isValidPhoneNumber(contact.phoneNumber)) {
         phones.add(contact.phoneNumber);
       }
     });
@@ -1839,6 +1839,17 @@ export class WhatsAppService {
     return Array.from(targets);
   }
 
+  private isValidPhoneNumber(phone: string): boolean {
+    if (!phone) return false;
+    const numeric = String(phone).replace(/\D/g, '');
+    if (!numeric) return false;
+    // Reasonable WhatsApp number length: 8-15 digits (E.164 up to 15)
+    if (numeric.length < 8 || numeric.length > 15) return false;
+    // reject strings of only zeros or obviously invalid patterns
+    if (/^0+$/.test(numeric)) return false;
+    return true;
+  }
+
   async getSettings(workspaceId: string) {
     return this.prisma.whatsAppSettings.findUnique({
       where: { workspaceId },
@@ -1858,6 +1869,68 @@ export class WhatsAppService {
         pollsEnabled: data.pollsEnabled ?? true,
       },
     });
+  }
+
+  /**
+   * Deleta todas as mensagens OUTGOING do workspace e atualiza/exclui conversas vazias.
+   * Uso: endpoint administrativo `POST /whatsapp/cleanup-outgoing`
+   */
+  async deleteOutgoingMessages(workspaceId: string) {
+    try {
+      // Coletar conversas afetadas
+      const convs = await this.prisma.message.findMany({
+        where: { workspaceId, direction: 'OUTGOING' },
+        select: { conversationId: true },
+        distinct: ['conversationId'],
+      });
+
+      const conversationIds = convs.map((c) => c.conversationId).filter(Boolean) as string[];
+
+      // Deletar mensagens OUTGOING
+      const deleted = await this.prisma.message.deleteMany({
+        where: { workspaceId, direction: 'OUTGOING' },
+      });
+
+      // Para cada conversa afetada, recalcular último message ou remover conversa se vazia
+      let updated = 0;
+      let removedConversations = 0;
+
+      for (const convId of conversationIds) {
+        const last = await this.prisma.message.findFirst({
+          where: { workspaceId, conversationId: convId },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (last) {
+          await this.prisma.conversation.update({
+            where: { id: convId },
+            data: {
+              lastMessageAt: last.createdAt,
+              lastMessage: last.text || null,
+            },
+          });
+          updated += 1;
+        } else {
+          // nenhuma mensagem restante → remover conversa
+          try {
+            await this.prisma.conversation.delete({ where: { id: convId } });
+            removedConversations += 1;
+          } catch (e) {
+            // se já removida ou erro, log e continuar
+            this.logger.warn(`Falha ao remover conversa ${convId}: ${String(e)}`);
+          }
+        }
+      }
+
+      return {
+        deletedCount: deleted.count ?? 0,
+        updatedConversations: updated,
+        removedConversations,
+      };
+    } catch (error) {
+      this.logger.error('Erro ao deletar mensagens OUTGOING:', error);
+      throw error;
+    }
   }
 
   private async ensurePollsEnabled(workspaceId: string): Promise<void> {
