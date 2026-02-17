@@ -604,10 +604,17 @@ export default function LeadsPage() {
     const key = `${selectedTarget.type}:${selectedTarget.id}`;
     let targetValue = '';
     if (selectedTarget.type === 'group') {
+      // groups may have a jid or an id that providers understand
       targetValue = selectedTarget.jid || selectedTarget.id || '';
     } else {
-      // prefer phoneNumber when available (avoid using internal jid/id strings)
-      targetValue = selectedTarget.phoneNumber || selectedTarget.jid || selectedTarget.id || '';
+      // contacts: prefer phoneNumber, then jid; never use internal DB id as destination
+      if (selectedTarget.phoneNumber && String(selectedTarget.phoneNumber).trim()) {
+        targetValue = selectedTarget.phoneNumber;
+      } else if (selectedTarget.jid && String(selectedTarget.jid).includes('@')) {
+        targetValue = selectedTarget.jid;
+      } else {
+        targetValue = '';
+      }
     }
 
     // fallback: try to resolve phoneNumber from existing conversations if missing
