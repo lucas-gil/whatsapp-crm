@@ -142,7 +142,18 @@ export class WhatsAppService {
     for (const target of targets) {
       try {
         const res = await this.defaultProvider.sendText(workspaceId, target, text);
-        messageId = (res as any)?.messageId || (res as any)?.id || String(res);
+        // Log provider response for debugging delivery issues
+        try {
+          this.logger.info(`Provider sendText response for workspace=${workspaceId} target=${target}: ${JSON.stringify(res)}`);
+        } catch (e) {
+          // ignore stringify errors
+        }
+        messageId = (res as any)?.messageId || (res as any)?.id || (res as any)?.idMessage || String(res || '');
+        if (!messageId) {
+          const errMsg = `Provider did not return messageId for target=${target}`;
+          this.logger.warn(errMsg);
+          throw new Error(errMsg);
+        }
         usedTimestamp = (res as any)?.timestamp;
         usedTarget = target;
         lastError = null;
