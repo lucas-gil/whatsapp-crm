@@ -607,11 +607,14 @@ export default function LeadsPage() {
       // groups may have a jid or an id that providers understand
       targetValue = selectedTarget.jid || selectedTarget.id || '';
     } else {
-      // contacts: prefer phoneNumber, then jid; never use internal DB id as destination
-      if (selectedTarget.phoneNumber && String(selectedTarget.phoneNumber).trim()) {
-        targetValue = selectedTarget.phoneNumber;
-      } else if (selectedTarget.jid && String(selectedTarget.jid).includes('@')) {
+      // contacts: align with group behavior — prefer jid, then provider id, then phoneNumber
+      // (backend will resolve to the correct JID/provider target when possible)
+      if (selectedTarget.jid && String(selectedTarget.jid).trim()) {
         targetValue = selectedTarget.jid;
+      } else if (selectedTarget.id && String(selectedTarget.id).trim()) {
+        targetValue = selectedTarget.id;
+      } else if (selectedTarget.phoneNumber && String(selectedTarget.phoneNumber).trim()) {
+        targetValue = selectedTarget.phoneNumber;
       } else {
         targetValue = '';
       }

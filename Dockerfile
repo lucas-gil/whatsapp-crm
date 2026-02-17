@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git nginx supervisor curl dumb-init bash netcat-traditional \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /app /var/log/supervisor /etc/nginx/conf.d /etc/supervisor/conf.d
+RUN ["mkdir","-p","/app","/var/log/supervisor","/etc/nginx/conf.d","/etc/supervisor/conf.d"]
 RUN groupadd -g 1001 nodejs && useradd -u 1001 -g nodejs -s /usr/sbin/nologin nodejs
 RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/*.conf 2>/dev/null || true
 
@@ -91,7 +91,7 @@ RUN printf '#!/bin/bash\necho "🔄 Aguardando banco de dados..."\nfor i in {1..
 chmod +x /entrypoint.sh && \
 printf '[supervisord]\nnodaemon=true\nuser=root\nlogfile=/dev/stdout\nlogfile_maxbytes=0\n\n[program:backend]\ndirectory=/app/backend\ncommand=node dist/main.js\nautostart=true\nautorestart=false\nstartsecs=10\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:frontend]\ndirectory=/app/frontend\ncommand=/bin/bash -c "exec npm start"\nenvironment=NODE_ENV=production,PORT=3001\nautostart=true\nautorestart=false\nstartsecs=15\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\n\n[program:nginx]\ncommand=/usr/sbin/nginx -g "daemon off;"\nautostart=true\nautorestart=false\nstartsecs=5\nstdout_logfile=/dev/stdout\nstdout_logfile_maxbytes=0\nstderr_logfile=/dev/stderr\nstderr_logfile_maxbytes=0\npriority=999\n' > /etc/supervisor/conf.d/supervisord.conf
 
-RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app
+RUN mkdir -p /app/backend/storage && chown -R 1001:1001 /app/backend/storage
 
 WORKDIR /app
 EXPOSE 80
