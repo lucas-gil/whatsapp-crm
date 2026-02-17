@@ -5,6 +5,9 @@ import { Toaster } from 'react-hot-toast';
 export const metadata: Metadata = {
   title: 'WhatsApp CRM',
   description: 'Plataforma de CRM integrada com WhatsApp',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
