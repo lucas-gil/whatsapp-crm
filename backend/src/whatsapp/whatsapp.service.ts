@@ -158,76 +158,117 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const targets = this.buildSendTargets(workspaceId, to);
-    let messageId = '';
-    let usedTarget = targets[0];
-    let lastError: unknown = null;
+    // Criar mensagem otimista (SENDING) e responder rápido ao cliente para evitar timeouts/proxy 504
+    // Upsert lead
+    const phoneNumber = this.normalizePhoneNumber(to);
+    const lead = await this.prisma.lead.upsert({
+      where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } },
+      update: {},
+      create: {
+        workspaceId,
+        phoneNumber,
+        name: phoneNumber,
+        origin: 'whatsapp_outgoing',
+        optIn: true,
+        optInDate: new Date(),
+      },
+    });
 
-    let usedTimestamp: number | undefined = undefined;
-    for (const target of targets) {
-      try {
-        const res = await this.defaultProvider.sendText(workspaceId, target, text);
-        // Log provider response for debugging delivery issues
+    // Criar ou atualizar conversa
+    let existingConversation = await this.prisma.conversation.findFirst({
+      where: { workspaceId, leadId: lead.id, groupId: null },
+    });
+
+    const messageDateNow = new Date();
+    const conversation = existingConversation
+      ? await this.prisma.conversation.update({
+          where: { id: existingConversation.id },
+          data: { lastMessageAt: messageDateNow, lastMessage: text },
+        })
+      : await this.prisma.conversation.create({
+          data: {
+            workspaceId,
+            leadId: lead.id,
+            groupId: null,
+            lastMessageAt: messageDateNow,
+            lastMessage: text,
+          },
+        });
+
+    // Criar mensagem otimista
+    const optimistic = await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        workspaceId,
+        whatsappMessageId: null,
+        direction: 'OUTGOING',
+        text,
+        type: 'text',
+        status: 'SENDING',
+        createdAt: messageDateNow,
+      },
+    });
+
+    // Responder ao cliente imediatamente
+    const responsePayload = { messageId: optimistic.id, status: 'sending', conversationId: conversation.id };
+
+    // Envio em background: tenta enviar pelos targets e atualiza a mensagem quando concluído
+    (async () => {
+      const targets = this.buildSendTargets(workspaceId, to);
+      let lastError: any = null;
+      let usedTarget = targets[0];
+      let usedMessageId: string | undefined = undefined;
+      let usedTimestamp: any = undefined;
+
+      for (const target of targets) {
         try {
-          this.logger.info(`Provider sendText response for workspace=${workspaceId} target=${target}: ${JSON.stringify(res)}`);
-        } catch (e) {
-          // ignore stringify errors
+          const res = await this.defaultProvider.sendText(workspaceId, target, text);
+          try {
+            this.logger.info(`Provider sendText response for workspace=${workspaceId} target=${target}: ${JSON.stringify(res)}`);
+          } catch (e) {}
+          usedMessageId = (res as any)?.messageId || (res as any)?.id || (res as any)?.idMessage || String(res || '');
+          usedTimestamp = (res as any)?.timestamp;
+          usedTarget = target;
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
         }
-        // always compute and log a normalized timestamp (or 'unknown') to make ordering/debugging easier
-        try {
-          const rawTs = (res as any)?.timestamp;
-          const norm = this.normalizeProviderTimestamp(rawTs);
-          const normStr = norm ? new Date(norm).toISOString() : 'unknown';
-          this.logger.info(`Provider normalized timestamp for workspace=${workspaceId} target=${target}: ${normStr} (raw: ${JSON.stringify(rawTs)})`);
-        } catch (e) {
-          // ignore normalization logging errors
-        }
-        messageId = (res as any)?.messageId || (res as any)?.id || (res as any)?.idMessage || String(res || '');
-        if (!messageId) {
-          const errMsg = `Provider did not return messageId for target=${target}`;
-          this.logger.warn(errMsg);
-          throw new Error(errMsg);
-        }
-        usedTimestamp = (res as any)?.timestamp;
-        usedTarget = target;
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error;
       }
-    }
 
-    if (lastError) {
-      const message = lastError instanceof Error ? lastError.message : String(lastError);
-      this.logger.warn(`Falha ao enviar texto para ${to}: ${message}`);
-      throw lastError;
-    }
-
-    // Normalize timestamp from provider (handle Long-like objects / seconds)
-    const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
-    // Registrar no banco (retorna conversationId quando possível)
-    let conversationId = await this.logMessage(
-      workspaceId,
-      usedTarget,
-      text,
-      'text',
-      messageId,
-      normalizedTs,
-    );
-    // Fallback: if logMessage didn't return a conversationId, try to look it up by whatsappMessageId
-    if (!conversationId) {
-      try {
-        const msg = await this.prisma.message.findFirst({ where: { workspaceId, whatsappMessageId: messageId } });
-        if (msg?.conversationId) {
-          conversationId = msg.conversationId;
-          this.logger.info(`Fallback resolved conversationId=${conversationId} for whatsappMessageId=${messageId}`);
+      if (lastError) {
+        const msg = lastError instanceof Error ? lastError.message : String(lastError);
+        this.logger.warn(`Falha ao enviar texto para ${to}: ${msg}`);
+        try {
+          await this.prisma.message.update({
+            where: { id: optimistic.id },
+            data: { status: 'FAILED', updatedAt: new Date() },
+          });
+        } catch (e) {
+          this.logger.error('Erro ao marcar mensagem como FAILED:', e);
         }
+        return;
+      }
+
+      // Normalizar timestamp do provider
+      const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
+
+      try {
+        await this.prisma.message.update({
+          where: { id: optimistic.id },
+          data: {
+            whatsappMessageId: usedMessageId || undefined,
+            status: 'SENT',
+            createdAt: new Date(normalizedTs),
+            updatedAt: new Date(),
+          },
+        });
       } catch (e) {
-        // ignore DB lookup errors for fallback
+        this.logger.error('Erro ao atualizar mensagem após envio:', e);
       }
-    }
+    })().catch((e) => this.logger.error('Erro no envio background:', e));
 
-    return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
+    return responsePayload;
   }
 
   /**
@@ -246,59 +287,79 @@ export class WhatsAppService {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const targets = this.buildSendTargets(workspaceId, to);
-    let messageId = '';
-    let usedTarget = targets[0];
-    let lastError: unknown = null;
+    // Criar mensagem otimista e retornar rapidamente
+    const phoneNumber = this.normalizePhoneNumber(to);
+    const lead = await this.prisma.lead.upsert({
+      where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } },
+      update: {},
+      create: {
+        workspaceId,
+        phoneNumber,
+        name: phoneNumber,
+        origin: 'whatsapp_outgoing',
+        optIn: true,
+        optInDate: new Date(),
+      },
+    });
 
-    let usedTimestamp: number | undefined = undefined;
-    for (const target of targets) {
-      try {
-        const res = await this.defaultProvider.sendMedia(
-          workspaceId,
-          target,
-          buffer,
-          fileName,
-          mimeType,
-          caption,
-        );
-        messageId = (res as any)?.messageId || (res as any)?.id || String(res);
-        usedTimestamp = (res as any)?.timestamp;
-        usedTarget = target;
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
+    let existingConversation = await this.prisma.conversation.findFirst({
+      where: { workspaceId, leadId: lead.id, groupId: null },
+    });
 
-    if (lastError) {
-      const message = lastError instanceof Error ? lastError.message : String(lastError);
-      this.logger.warn(`Falha ao enviar midia para ${to}: ${message}`);
-      throw lastError;
-    }
+    const messageDateNow = new Date();
+    const conversation = existingConversation
+      ? await this.prisma.conversation.update({ where: { id: existingConversation.id }, data: { lastMessageAt: messageDateNow, lastMessage: caption || fileName } })
+      : await this.prisma.conversation.create({ data: { workspaceId, leadId: lead.id, groupId: null, lastMessageAt: messageDateNow, lastMessage: caption || fileName } });
 
-    // Normalize timestamp and persist
-    const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
-    let conversationId = await this.logMessage(
-      workspaceId,
-      usedTarget,
-      caption || fileName,
-      'media',
-      messageId,
-      normalizedTs,
-    );
-    if (!conversationId) {
-      try {
-        const msg = await this.prisma.message.findFirst({ where: { workspaceId, whatsappMessageId: messageId } });
-        if (msg?.conversationId) {
-          conversationId = msg.conversationId;
-          this.logger.info(`Fallback resolved conversationId=${conversationId} for whatsappMessageId=${messageId}`);
+    const optimistic = await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        workspaceId,
+        whatsappMessageId: null,
+        direction: 'OUTGOING',
+        text: caption || fileName,
+        type: 'media',
+        status: 'SENDING',
+        createdAt: messageDateNow,
+      },
+    });
+
+    const responsePayload = { messageId: optimistic.id, status: 'sending', conversationId: conversation.id };
+
+    (async () => {
+      const targets = this.buildSendTargets(workspaceId, to);
+      let lastError: any = null;
+      let usedMessageId: string | undefined = undefined;
+      let usedTimestamp: any = undefined;
+
+      for (const target of targets) {
+        try {
+          const res = await this.defaultProvider.sendMedia(workspaceId, target, buffer, fileName, mimeType, caption);
+          usedMessageId = (res as any)?.messageId || (res as any)?.id || String(res);
+          usedTimestamp = (res as any)?.timestamp;
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err;
         }
-      } catch (e) {}
-    }
+      }
 
-    return { messageId, status: 'sent', timestamp: new Date(normalizedTs).toISOString(), conversationId };
+      if (lastError) {
+        const msg = lastError instanceof Error ? lastError.message : String(lastError);
+        this.logger.warn(`Falha ao enviar mídia para ${to}: ${msg}`);
+        try { await this.prisma.message.update({ where: { id: optimistic.id }, data: { status: 'FAILED', updatedAt: new Date() } }); } catch (e) { this.logger.error('Erro ao marcar mídia como FAILED:', e); }
+        return;
+      }
+
+      const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
+      try {
+        await this.prisma.message.update({ where: { id: optimistic.id }, data: { whatsappMessageId: usedMessageId || undefined, status: 'SENT', createdAt: new Date(normalizedTs), updatedAt: new Date() } });
+      } catch (e) {
+        this.logger.error('Erro ao atualizar mensagem de mídia após envio:', e);
+      }
+    })().catch((e) => this.logger.error('Erro no envio de mídia background:', e));
+
+    return responsePayload;
   }
 
   /**
@@ -401,62 +462,53 @@ export class WhatsAppService {
           introFilePath: section.introFilePath,
           introFileName: section.introFileName,
           introFileMime: section.introFileMime,
-        });
-      }
+            const isConnected = await this.isConnected(workspaceId);
+            if (!isConnected) {
+              throw new Error('WhatsApp não está conectado');
+            }
 
-      const labels = section.options.map((option: any) => option.label);
-      const pollResponse = campaign.useNative
-        ? await this.sendPoll(workspaceId, resolvedTarget, section.question, labels)
-        : await this.sendText(
-            workspaceId,
-            resolvedTarget,
-            this.buildPollFallback(section.question, labels),
-          );
+            const phoneNumber = this.normalizePhoneNumber(to);
+            const lead = await this.prisma.lead.upsert({ where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } }, update: {}, create: { workspaceId, phoneNumber, name: phoneNumber, origin: 'whatsapp_outgoing', optIn: true, optInDate: new Date() } });
 
-      return pollResponse.messageId;
-    }
+            let existingConversation = await this.prisma.conversation.findFirst({ where: { workspaceId, leadId: lead.id, groupId: null } });
+            const messageDateNow = new Date();
+            const conversation = existingConversation
+              ? await this.prisma.conversation.update({ where: { id: existingConversation.id }, data: { lastMessageAt: messageDateNow, lastMessage: question } })
+              : await this.prisma.conversation.create({ data: { workspaceId, leadId: lead.id, groupId: null, lastMessageAt: messageDateNow, lastMessage: question } });
 
-    const pollOptions = Array.isArray(campaign.options) ? campaign.options : [];
+            const optimistic = await this.prisma.message.create({ data: { conversationId: conversation.id, workspaceId, whatsappMessageId: null, direction: 'OUTGOING', text: question, type: 'poll', status: 'SENDING', createdAt: messageDateNow } });
+            const responsePayload = { messageId: optimistic.id, status: 'sending', conversationId: conversation.id };
 
-    if (!pollOptions.length) {
-      throw new Error('Enquete sem opcoes');
-    }
+            (async () => {
+              const targets = this.buildSendTargets(workspaceId, to);
+              let lastError: any = null;
+              let usedMessageId: string | undefined = undefined;
+              let usedTimestamp: any = undefined;
 
-    if (sendOptions?.includeIntro !== false) {
-      await this.sendIntroContent(workspaceId, resolvedTarget, campaign);
-    }
+              for (const target of targets) {
+                try {
+                  const res = await this.defaultProvider.sendPoll(workspaceId, target, question, options);
+                  usedMessageId = (res as any)?.messageId || (res as any)?.id || String(res);
+                  usedTimestamp = (res as any)?.messageTimestamp || (res as any)?.message?.timestamp || Date.now();
+                  lastError = null;
+                  break;
+                } catch (err) {
+                  lastError = err;
+                }
+              }
 
-    const pollResponse = campaign.useNative
-      ? await this.sendPoll(workspaceId, resolvedTarget, campaign.question, pollOptions)
-      : await this.sendText(
-          workspaceId,
-          resolvedTarget,
-          this.buildPollFallback(campaign.question, pollOptions),
-        );
+              if (lastError) {
+                const msg = lastError instanceof Error ? lastError.message : String(lastError);
+                this.logger.warn(`Falha ao enviar enquete para ${to}: ${msg}`);
+                try { await this.prisma.message.update({ where: { id: optimistic.id }, data: { status: 'FAILED', updatedAt: new Date() } }); } catch (e) { this.logger.error('Erro ao marcar enquete como FAILED:', e); }
+                return;
+              }
 
-    return pollResponse.messageId;
-  }
+              const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
+              try { await this.prisma.message.update({ where: { id: optimistic.id }, data: { whatsappMessageId: usedMessageId || undefined, status: 'SENT', createdAt: new Date(normalizedTs), updatedAt: new Date() } }); } catch (e) { this.logger.error('Erro ao atualizar mensagem de enquete após envio:', e); }
+            })().catch((e) => this.logger.error('Erro no envio de enquete background:', e));
 
-  /**
-   * Listar grupos
-   */
-  async listGroups(workspaceId: string) {
-    const isConnected = await this.isConnected(workspaceId);
-    if (!isConnected) {
-      throw new Error('WhatsApp não está conectado');
-    }
-
-    const providerGroups = await this.defaultProvider.listGroups(workspaceId);
-    const storedGroups = await Promise.all(
-      providerGroups.map(async (group: any) => {
-        if (!group?.id) return null;
-        const existing = await this.prisma.group.findFirst({
-          where: {
-            workspaceId,
-            whatsappGroupId: group.id,
-          },
-        });
-
+            return responsePayload;
         if (existing) {
           if (existing.name !== group.name) {
             await this.prisma.group.update({
