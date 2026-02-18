@@ -439,116 +439,70 @@ export class WhatsAppService {
     phoneNumber?: string,
     sendOptions?: { includeIntro?: boolean; sectionIndex?: number },
   ): Promise<string> {
+    // Validacoes basicas e resolucao do target
     await this.ensurePollsEnabled(workspaceId);
     const resolvedTarget = this.resolveTargetJid(workspaceId, targetJid);
-    this.logger.info(
-      `🧭 Envio de enquete: target=${targetJid} resolved=${resolvedTarget} ` +
-        `section=${sendOptions?.sectionIndex ?? 0}`,
-    );
-    const sections = Array.isArray(campaign.sections) ? campaign.sections : null;
+    this.logger.info(`🧭 Envio de enquete: target=${targetJid} resolved=${resolvedTarget} section=${sendOptions?.sectionIndex ?? 0}`);
+
+    const sections = Array.isArray(campaign?.sections) ? campaign.sections : null;
     const sectionIndex = sendOptions?.sectionIndex ?? 0;
 
-    if (sections?.length) {
-      const section = sections[sectionIndex];
-      if (!section?.options?.length) {
-        throw new Error('Enquete sem opcoes');
-      }
+    // selecionar perguntas/opcoes
+    const question = sections?.length ? sections[sectionIndex]?.question : campaign?.question;
+    const options = sections?.length ? sections[sectionIndex]?.options : campaign?.options;
 
-      if (sendOptions?.includeIntro !== false) {
-        await this.sendIntroContent(workspaceId, resolvedTarget, {
-          introTitle: section.title,
-          introInfo: section.info,
-          introMessage: section.message,
-          introFilePath: section.introFilePath,
-          introFileName: section.introFileName,
-          introFileMime: section.introFileMime,
-            const isConnected = await this.isConnected(workspaceId);
-            if (!isConnected) {
-              throw new Error('WhatsApp não está conectado');
-            }
+    if (!question || !Array.isArray(options) || !options.length) {
+      throw new Error('Enquete sem opcoes ou pergunta definida');
+    }
 
-            const phoneNumber = this.normalizePhoneNumber(to);
-            const lead = await this.prisma.lead.upsert({ where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } }, update: {}, create: { workspaceId, phoneNumber, name: phoneNumber, origin: 'whatsapp_outgoing', optIn: true, optInDate: new Date() } });
+    // enviar introducao se solicitado
+    if (sendOptions?.includeIntro !== false) {
+      const introSource = sections?.length ? {
+        introTitle: sections[sectionIndex]?.title || null,
+        introInfo: sections[sectionIndex]?.info || null,
+        introMessage: sections[sectionIndex]?.message || null,
+        introFilePath: sections[sectionIndex]?.introFilePath || null,
+        introFileName: sections[sectionIndex]?.introFileName || null,
+        introFileMime: sections[sectionIndex]?.introFileMime || null,
+      } : {};
 
-            let existingConversation = await this.prisma.conversation.findFirst({ where: { workspaceId, leadId: lead.id, groupId: null } });
-            const messageDateNow = new Date();
-            const conversation = existingConversation
-              ? await this.prisma.conversation.update({ where: { id: existingConversation.id }, data: { lastMessageAt: messageDateNow, lastMessage: question } })
-              : await this.prisma.conversation.create({ data: { workspaceId, leadId: lead.id, groupId: null, lastMessageAt: messageDateNow, lastMessage: question } });
-
-            const optimistic = await this.prisma.message.create({ data: { conversationId: conversation.id, workspaceId, whatsappMessageId: null, direction: 'OUTGOING', text: question, type: 'poll', status: 'SENDING', createdAt: messageDateNow } });
-            const responsePayload = { messageId: optimistic.id, status: 'sending', conversationId: conversation.id };
-
-            (async () => {
-              const targets = this.buildSendTargets(workspaceId, to);
-              let lastError: any = null;
-              let usedMessageId: string | undefined = undefined;
-              let usedTimestamp: any = undefined;
-
-              for (const target of targets) {
-                try {
-                  const res = await this.defaultProvider.sendPoll(workspaceId, target, question, options);
-                  usedMessageId = (res as any)?.messageId || (res as any)?.id || String(res);
-                  usedTimestamp = (res as any)?.messageTimestamp || (res as any)?.message?.timestamp || Date.now();
-                  lastError = null;
-                  break;
-                } catch (err) {
-                  lastError = err;
-                }
-              }
-
-              if (lastError) {
-                const msg = lastError instanceof Error ? lastError.message : String(lastError);
-                this.logger.warn(`Falha ao enviar enquete para ${to}: ${msg}`);
-                try { await this.prisma.message.update({ where: { id: optimistic.id }, data: { status: 'FAILED', updatedAt: new Date() } }); } catch (e) { this.logger.error('Erro ao marcar enquete como FAILED:', e); }
-                return;
-              }
-
-              const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
-              try { await this.prisma.message.update({ where: { id: optimistic.id }, data: { whatsappMessageId: usedMessageId || undefined, status: 'SENT', createdAt: new Date(normalizedTs), updatedAt: new Date() } }); } catch (e) { this.logger.error('Erro ao atualizar mensagem de enquete após envio:', e); }
-            })().catch((e) => this.logger.error('Erro no envio de enquete background:', e));
-
-            return responsePayload;
-        if (existing) {
-          if (existing.name !== group.name) {
-            await this.prisma.group.update({
-              where: { id: existing.id },
-              data: { name: group.name || existing.name },
-            });
-          }
-          return {
-            id: existing.id,
-            name: group.name || existing.name,
-            participantCount: group.participantCount || 0,
-            whatsappGroupId: group.id,
-          };
+      if (Object.keys(introSource).length) {
+        try {
+          await this.sendIntroContent(workspaceId, resolvedTarget, introSource as any);
+        } catch (err) {
+          this.logger.warn('Falha ao enviar conteúdo introdutório da enquete:', err);
         }
+      }
+    }
 
-        const created = await this.prisma.group.create({
-          data: {
-            workspaceId,
-            name: group.name || group.id,
-            whatsappGroupId: group.id,
-          },
-        });
-
-        return {
-          id: created.id,
-          name: created.name,
-          participantCount: group.participantCount || 0,
-          whatsappGroupId: group.id,
-        };
-      }),
-    );
-
-    return storedGroups
-      .filter(Boolean)
-      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR'));
+    // Enviar enquete principal (usa sendPoll que já realiza persistência e retorno)
+    const res = await this.sendPoll(workspaceId, resolvedTarget, question, options);
+    return res.messageId;
   }
 
   /**
    * Listar contatos do WhatsApp conectado
    */
+  async listGroups(workspaceId: string) {
+    const isConnected = await this.isConnected(workspaceId);
+    if (!isConnected) {
+      throw new Error('WhatsApp não está conectado');
+    }
+
+    try {
+      const groups = await this.prisma.group.findMany({ where: { workspaceId } });
+      return groups.map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        participantCount: g.participantCount || 0,
+        whatsappGroupId: g.whatsappGroupId,
+      }));
+    } catch (err) {
+      this.logger.error('Erro ao listar grupos:', err);
+      return [];
+    }
+  }
+
   async listContacts(workspaceId: string) {
     const isConnected = await this.isConnected(workspaceId);
     if (!isConnected) {
