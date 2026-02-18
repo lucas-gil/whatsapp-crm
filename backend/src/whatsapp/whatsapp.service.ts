@@ -212,8 +212,9 @@ export class WhatsAppService {
     // Responder ao cliente imediatamente
     const responsePayload = { messageId: optimistic.id, status: 'sending', conversationId: conversation.id };
 
-    // Envio em background: tenta enviar pelos targets e atualiza a mensagem quando concluído
-    (async () => {
+    let backgroundUpdated = false;
+
+    const sendToProvider = async () => {
       const targets = this.buildSendTargets(workspaceId, to);
       let lastError: any = null;
       let usedTarget = targets[0];
@@ -247,12 +248,13 @@ export class WhatsAppService {
         } catch (e) {
           this.logger.error('Erro ao marcar mensagem como FAILED:', e);
         }
-        return;
+        return { usedMessageId: undefined, usedTimestamp: undefined };
       }
 
       // Normalizar timestamp do provider
       const normalizedTs = this.normalizeProviderTimestamp(usedTimestamp) || Date.now();
 
+      // Atualiza DB com as infos do provider
       try {
         await this.prisma.message.update({
           where: { id: optimistic.id },
@@ -263,10 +265,37 @@ export class WhatsAppService {
             updatedAt: new Date(),
           },
         });
+        backgroundUpdated = true;
       } catch (e) {
         this.logger.error('Erro ao atualizar mensagem após envio:', e);
       }
-    })().catch((e) => this.logger.error('Erro no envio background:', e));
+
+      return { usedMessageId, usedTimestamp: normalizedTs };
+    };
+
+    const bgPromise = sendToProvider().catch((e) => {
+      this.logger.error('Erro no envio background:', e instanceof Error ? e.message : String(e));
+      return { usedMessageId: undefined, usedTimestamp: undefined };
+    });
+
+    // Wait a short time for provider reply (optimistic improvement). If provider responds quickly, include provider info in HTTP response.
+    const providerResult = await Promise.race([
+      bgPromise,
+      new Promise<null>((res) => setTimeout(() => res(null), 400)),
+    ]);
+
+    if (providerResult && (providerResult as any).usedMessageId) {
+      try {
+        const tsIso = new Date((providerResult as any).usedTimestamp).toISOString();
+        (responsePayload as any).messageId = (providerResult as any).usedMessageId;
+        (responsePayload as any).timestamp = tsIso;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Ensure background promise is observed to log errors (already handled)
+    bgPromise.then(() => {}).catch(() => {});
 
     return responsePayload;
   }
