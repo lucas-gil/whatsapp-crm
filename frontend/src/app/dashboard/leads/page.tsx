@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useWhatsAppWebSocket } from '@/hooks/useWhatsAppWebSocket';
 
 type Lead = {
   id: string;
@@ -81,6 +82,7 @@ const emojiList = [
 
 export default function LeadsPage() {
   const { token } = useAuth();
+  const { socket, connected, onEvent } = useWhatsAppWebSocket(token);
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const api = apiBase
     ? apiBase.replace(/\/$/, '')
@@ -132,6 +134,54 @@ export default function LeadsPage() {
     if (!token) return;
     loadData();
   }, [token]);
+
+  // Listen to socket events to keep UI in sync when messages are sent/updated
+  useEffect(() => {
+    if (!token || !onEvent) return;
+
+    const offSent = onEvent('message_sent', async (payload: any) => {
+      try {
+        // Refresh conversations and messages when provider confirms send
+        const refreshed = await fetchConversations({ Authorization: `Bearer ${token}` });
+        if (!refreshed) return;
+
+        // If payload contains conversationId, open it and refresh messages
+        const convoId = payload?.conversationId;
+        if (convoId) {
+          setSelectedConversationId(convoId);
+          const key = selectedTarget ? `${selectedTarget.type}:${selectedTarget.id}` : '';
+          if (key) {
+            await loadConversationMessages(convoId, key);
+          }
+        } else {
+          // Try to match by phoneNumber if selectedTarget is a contact
+          if (selectedTarget?.type === 'contact') {
+            const match = refreshed.find((item: any) =>
+              item.leadId === selectedTarget.id || (selectedTarget.phoneNumber && item.lead?.phoneNumber === selectedTarget.phoneNumber),
+            );
+            if (match?.id) {
+              setSelectedConversationId(match.id);
+              const key = `${selectedTarget.type}:${selectedTarget.id}`;
+              await loadConversationMessages(match.id, key);
+            }
+          }
+        }
+      } catch (e) {
+        // ignore errors from socket handlers
+      }
+    });
+
+    const offStatus = onEvent('message_status', async (_payload: any) => {
+      try {
+        await fetchConversations({ Authorization: `Bearer ${token}` });
+      } catch (e) {}
+    });
+
+    return () => {
+      if (offSent) offSent();
+      if (offStatus) offStatus();
+    };
+  }, [token, onEvent, selectedTarget]);
 
   const loadData = async () => {
     try {

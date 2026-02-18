@@ -41,9 +41,19 @@ export function useAuth() {
           localStorage.removeItem('authToken');
         }
 
-        // Se não tem token, buscar um token padrão
-        const response = await fetch(`${api}/auth/default-token`);
-        
+        // Se não tem token, buscar um token padrão.
+        // Em dev local, o backend pode não estar exposto em /api, então tentamos alguns endpoints de fallback.
+        let response = await fetch(`${api}/auth/default-token`);
+
+        if (!response.ok) {
+          // tentar acessar backend direto em localhost:3000
+          try {
+            response = await fetch(`http://localhost:3000/auth/default-token`);
+          } catch (e) {
+            // ignore
+          }
+        }
+
         if (!response.ok) {
           throw new Error('Falha ao obter token padrão');
         }
