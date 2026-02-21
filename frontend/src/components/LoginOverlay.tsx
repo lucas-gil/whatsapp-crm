@@ -34,7 +34,6 @@ export default function LoginOverlay(props: Props) {
       const data: any = await onLogin(String(key).trim());
       if (data?.isAdmin) {
         setIsAdminMode(true);
-        try { localStorage.setItem('auth_admin_mode', '1'); } catch (e) {}
         return;
       }
       onClose && onClose();
@@ -48,8 +47,7 @@ export default function LoginOverlay(props: Props) {
   const handleLogout = () => {
     try {
       onLogout && onLogout();
-      localStorage.removeItem('authToken');
-      try { localStorage.removeItem('auth_admin_mode'); } catch (e) {}
+      // token is in-memory; just call onLogout
     } catch (e) {}
   };
 
@@ -168,7 +166,6 @@ export default function LoginOverlay(props: Props) {
                   type="button"
                   onClick={() => {
                     setIsAdminMode(false);
-                    try { localStorage.removeItem('auth_admin_mode'); } catch (e) {}
                     onClose && onClose();
                   }}
                   className="px-3 py-2 rounded border"

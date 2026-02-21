@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import LoginOverlay from './LoginOverlay';
 
 export default function AuthGate({ children }: PropsWithChildren) {
-  const { token, ready, loading, error, login, logout } = useAuth();
+  const { token, ready, loading, error, login, logout, isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
 
   const initializedRef = useRef(false);
@@ -34,14 +34,10 @@ export default function AuthGate({ children }: PropsWithChildren) {
   // If token just appeared, close login modal unless admin mode is active
   useEffect(() => {
     if (token) {
-      try {
-        const adminFlag = localStorage.getItem('auth_admin_mode');
-        if (!adminFlag) setOpen(false);
-      } catch (e) {
-        setOpen(false);
-      }
+      // close modal after login unless user is admin
+      if (!isAdmin) setOpen(false);
     }
-  }, [token]);
+  }, [token, isAdmin]);
 
   // If initial auth check not finished, render nothing to avoid FOUC
   if (!ready) return null;

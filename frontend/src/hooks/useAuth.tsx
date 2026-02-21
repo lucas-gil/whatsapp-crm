@@ -43,76 +43,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    const init = async () => {
-      try {
-        const currentBuild =
-          process.env.NEXT_PUBLIC_APP_BUILD ||
-          process.env.NEXT_PUBLIC_GIT_SHA ||
-          process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
-          process.env.NEXT_PUBLIC_APP_NAME ||
-          'dev';
-
-        const saved = localStorage.getItem('app_build');
-        if (saved && saved !== currentBuild) {
-          // app was updated — force re-login
-          try {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('auth_admin_mode');
-          } catch (e) {}
-        }
-        try {
-          localStorage.setItem('app_build', String(currentBuild));
-        } catch (e) {}
-      } catch (e) {
-        // ignore if localStorage not available
-      }
-
-      try {
-        const stored = localStorage.getItem('authToken');
-        if (stored) {
-          const api = getApiBase();
-          const res = await fetch(`${api}/auth/me`, {
-            headers: { Authorization: `Bearer ${stored}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (!mounted) return;
-            setToken(stored);
-            setIsAdmin(Boolean(data?.isAdmin));
-          } else {
-            localStorage.removeItem('authToken');
-            setToken(null);
-            setIsAdmin(false);
-          }
-        }
-      } catch (err) {
-        // ignore network errors here — user will login manually
-        // eslint-disable-next-line no-console
-        console.debug('Auth init error', err);
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
-        setReady(true);
-      }
-    };
-
-    init();
-
-    const onStorage = (ev: StorageEvent) => {
-      if (ev.key === 'authToken') {
-        setToken(ev.newValue);
-      }
-      if (ev.key === 'auth_admin_mode' && ev.newValue == null) {
-        // admin mode cleared
-      }
-    };
-    window.addEventListener('storage', onStorage);
-
-    return () => {
-      mounted = false;
-      window.removeEventListener('storage', onStorage);
-    };
+    // No persistent token: require login on each refresh. Mark ready immediately.
+    setLoading(false);
+    setReady(true);
   }, []);
 
   const login = async (key: string) => {
@@ -135,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const data = await res.json();
       const newToken = data.accessToken;
-      localStorage.setItem('authToken', newToken);
+      // keep token only in-memory: this forces login after each page refresh
       setToken(newToken);
       setIsAdmin(Boolean(data.isAdmin));
       return data as LoginResponse;
@@ -152,24 +85,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       const api = getApiBase();
-      const stored = localStorage.getItem('authToken');
-      if (stored) {
-        await fetch(`${api}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${stored}` } });
+      if (token) {
+        await fetch(`${api}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       }
     } catch (e) {
       // ignore
     }
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('auth_admin_mode');
     setToken(null);
     setIsAdmin(false);
   };
 
   const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
-    const stored = localStorage.getItem('authToken');
-    if (!stored) throw new Error('Not authenticated');
+    if (!token) throw new Error('Not authenticated');
     const headers = new Headers(init?.headers || {});
-    headers.set('Authorization', `Bearer ${stored}`);
+    headers.set('Authorization', `Bearer ${token}`);
     return fetch(input, { ...init, headers });
   };
 
