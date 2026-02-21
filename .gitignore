@@ -45,3 +45,7 @@ sessions/
 # OS
 Thumbs.db
 .AppleDouble
+
+# Next.js build artifacts
+/frontend/.next
+
