@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -44,10 +44,17 @@ export class AuthController {
   }
 
   @Get('default-token')
-  async getDefaultToken() {
-    this.logger.info(`📥 GET /auth/default-token recebido (público)`);
+  @UseGuards(JwtAuthGuard)
+  async getDefaultToken(@Request() req: any) {
+    this.logger.info(`📥 GET /auth/default-token recebido (protegido)`);
+    // Apenas admin pode gerar token padrão
+    if (!req.user || !req.user.isAdmin) {
+      this.logger.warn(`⚠️ /auth/default-token acesso negado para usuário não-admin`);
+      throw new ForbiddenException('Apenas admin pode gerar token padrão');
+    }
+
     const token = await this.authService.generateDefaultToken();
-    this.logger.info(`✅ Token padrão gerado com sucesso`);
+    this.logger.info(`✅ Token padrão gerado com sucesso por admin`);
     return { accessToken: token };
   }
 }
