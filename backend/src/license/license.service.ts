@@ -19,12 +19,16 @@ export class LicenseService {
 
     // Calcular data de expiração
     let expiresAt: Date | null = null;
-    if (dto.type === LicenseTypeEnum.TEMPORARY_12MIN) {
-      expiresAt = new Date(Date.now() + 12 * 60 * 1000); // 12 minutos
-    } else if (dto.type === LicenseTypeEnum.TEMPORARY_30DAYS) {
-      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+    if (dto.ttlSeconds && dto.ttlSeconds > 0) {
+      expiresAt = new Date(Date.now() + dto.ttlSeconds * 1000);
+    } else {
+      if (dto.type === LicenseTypeEnum.TEMPORARY_12MIN) {
+        expiresAt = new Date(Date.now() + 12 * 60 * 1000); // 12 minutos
+      } else if (dto.type === LicenseTypeEnum.TEMPORARY_30DAYS) {
+        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+      }
+      // ADMIN_INFINITE: expiresAt = null
     }
-    // ADMIN_INFINITE: expiresAt = null
 
     const license = await this.prisma.licenseKey.create({
       data: {
@@ -33,6 +37,7 @@ export class LicenseService {
         keyPreview,
         type: dto.type as any,
         expiresAt,
+        options: dto.options || undefined,
       },
     });
 

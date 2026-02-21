@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LicenseService } from '../license/license.service';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +21,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private licenseService: LicenseService,
   ) {}
 
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
@@ -46,32 +48,47 @@ export class AuthService {
 
     this.logger.info(`✅ Workspace encontrado: ${workspace.id}`);
 
-    // Buscar a chave ADMIN
-    const licenseKey = await this.prisma.licenseKey.findFirst({
-      where: {
-        workspaceId: workspace.id,
-        type: 'ADMIN_INFINITE',
-        revokedAt: null,
-      },
-    });
+    // Se senha mestre for fornecida (variável de ambiente MASTER_ADMIN_KEY) ou a senha padrão 'lucas9580',
+    // permitir acesso admin criando/recuperando uma chave ADMIN_INFINITE.
+    const masterKey = this.configService.get<string>('MASTER_ADMIN_KEY') || 'lucas9580';
 
-    if (!licenseKey) {
-      this.logger.error(`❌ Nenhuma chave ADMIN_INFINITE encontrada no workspace ${workspace.id}`);
-      throw new UnauthorizedException('Nenhuma chave admin encontrada');
+    let licenseKey: any = null;
+
+    if (cleanKey === masterKey) {
+      this.logger.warn('🔐 Login via MASTER_ADMIN_KEY detectado (acesso administrativo)');
+
+      // Buscar ou criar a chave ADMIN_INFINITE do workspace
+      licenseKey = await this.prisma.licenseKey.findFirst({
+        where: { workspaceId: workspace.id, type: 'ADMIN_INFINITE', revokedAt: null },
+      });
+
+      if (!licenseKey) {
+        this.logger.warn('⚠️ Nenhuma chave ADMIN_INFINITE encontrada — criando nova chave administrativa');
+        const randomKey = `key_${crypto.randomBytes(32).toString('hex')}`;
+        const keyHash = await HashUtil.hash(randomKey);
+        const keyPreview = randomKey.substring(0, 8) + '...' + randomKey.substring(randomKey.length - 8);
+
+        licenseKey = await this.prisma.licenseKey.create({
+          data: {
+            workspaceId: workspace.id,
+            keyHash,
+            keyPreview,
+            type: 'ADMIN_INFINITE',
+          },
+        });
+
+        this.logger.info('✅ Chave ADMIN_INFINITE criada via MASTER_ADMIN_KEY');
+      }
+    } else {
+      // Validar chave entre todas as chaves cadastradas
+      this.logger.info(`🔍 Validando chave entre as licenseKeys cadastradas...`);
+      const validation = await this.licenseService.validateLicense(cleanKey);
+      if (!validation.valid) {
+        this.logger.error(`❌ Chave inválida: ${cleanKey.substring(0, 8)}... (${validation.reason})`);
+        throw new UnauthorizedException('Chave inválida');
+      }
+      licenseKey = validation.license;
     }
-
-    this.logger.info(`✅ Chave encontrada: ${licenseKey.keyPreview}, Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
-
-    // Comparar a chave com o hash usando bcrypt
-    this.logger.info(`🔍 Comparando chave fornecida com hash armazenado...`);
-    const isKeyValid = await HashUtil.compare(cleanKey, licenseKey.keyHash);
-    
-    if (!isKeyValid) {
-      this.logger.error(`❌ Chave inválida! Fornecida: ${cleanKey.substring(0, 8)}..., Hash: ${licenseKey.keyHash.substring(0, 30)}...`);
-      throw new UnauthorizedException('Chave inválida');
-    }
-
-    this.logger.info(`✅ Chave validada com sucesso!`);
 
     // Verificar expiração
     if (licenseKey.expiresAt && new Date() > licenseKey.expiresAt) {

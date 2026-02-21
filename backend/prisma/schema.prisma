@@ -55,6 +55,9 @@ model LicenseKey {
   keyHash         String      @unique
   keyPreview      String      // ex: "key_abc123...xyz" (primeiros e últimos chars)
   
+  // Opções/customizações associadas à chave (salvas como JSON)
+  options         Json?
+  
   type            LicenseType
   expiresAt       DateTime?   // null = infinita
   activatedAt     DateTime?   // quando foi usado pela primeira vez
