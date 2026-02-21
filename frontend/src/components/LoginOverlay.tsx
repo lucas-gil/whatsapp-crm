@@ -13,7 +13,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
   const [key, setKey] = useState('');
   const [workspace, setWorkspace] = useState('default');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  // não mostrar a senha por padrão nem oferecer toggle
   const [localError, setLocalError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
@@ -59,21 +59,13 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
             <label className="block text-sm font-medium text-gray-700 mb-1">Chave de Acesso</label>
             <div className="relative">
               <input
-                type={showPassword ? 'text' : 'password'}
-                className="w-full border rounded px-3 py-2 pr-10"
+                type="password"
+                className="w-full border rounded px-3 py-2"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
-                placeholder="Digite a chave (ex: lucas9580)"
+                placeholder="Digite a chave de acesso"
                 autoFocus
               />
-              <button
-                type="button"
-                aria-label="Mostrar senha"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500"
-              >
-                {showPassword ? 'Ocultar' : 'Mostrar'}
-              </button>
             </div>
           </div>
 
@@ -88,7 +80,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
           </div>
 
           {(localError || error) && (
-            <div className="mb-3 text-sm text-red-600">{localError || error}</div>
+            <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>
           )}
 
           <div className="flex items-center justify-between">
