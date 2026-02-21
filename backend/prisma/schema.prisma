@@ -175,7 +175,7 @@ model Lead {
   broadcasts      BroadcastRecipient[]
   orders          Order[]
   // Billing relation (opposite side of BillingClient.lead)
-  billingClient   BillingClient?
+  billingClients  BillingClient[]
 
   @@unique([workspaceId, phoneNumber])
   @@index([workspaceId])
