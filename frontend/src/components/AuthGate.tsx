@@ -10,6 +10,21 @@ export default function AuthGate() {
 
   useEffect(() => {
     if (!loading && !token) setOpen(true); // abrir automaticamente quando não autenticado
+
+    // Se a URL contém ?forceLogin=1, forçar abertura do modal
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('forceLogin') === '1') {
+        setOpen(true);
+        // remover o param da URL para não reabrir em reload
+        params.delete('forceLogin');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    } catch (e) {
+      // ignore
+    }
   }, [loading, token]);
 
   if (loading) return null;
