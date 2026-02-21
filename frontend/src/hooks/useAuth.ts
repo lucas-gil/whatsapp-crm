@@ -93,6 +93,7 @@ export function useAuth() {
       const newToken = data.accessToken;
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
+      return data;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       setError(msg);

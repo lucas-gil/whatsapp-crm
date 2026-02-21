@@ -14,6 +14,10 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
   const [loading, setLoading] = useState(false);
   // não mostrar a senha por padrão nem oferecer toggle
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [ttlSeconds, setTtlSeconds] = useState<string>('2592000'); // padrão 30 dias
+  const [optionsText, setOptionsText] = useState<string>('{}');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +33,16 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
       // útil para diagnóstico no navegador remoto
       // eslint-disable-next-line no-console
       console.debug('LoginOverlay: submit', { keyPreview: key.trim().substring(0, 8) + '...' });
-      await onLogin(key.trim());
+
+      // onLogin agora retorna os dados do servidor (incluindo isAdmin)
+      const data: any = await onLogin(key.trim());
+
+      if (data?.isAdmin) {
+        // permanecer no modal e mostrar opções de admin para gerar senhas
+        setIsAdminMode(true);
+        return;
+      }
+
       onClose && onClose();
     } catch (err: any) {
       const msg = err?.message || 'Erro ao autenticar';
@@ -75,16 +88,95 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
 
           {/* Workspace removido temporariamente para compatibilidade com backends antigos */}
 
-          {(localError || error) && (
-            <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>
-          )}
+            {/* Admin mode: mostrar gerador de senhas */}
+            {isAdminMode && (
+              <div className="mb-4 border-t pt-4">
+                <h3 className="text-sm font-semibold mb-2">Modo Admin — Gerar nova senha</h3>
+                <label className="block text-sm text-gray-600 mb-1">Duração (segundos)</label>
+                <input
+                  className="w-full border rounded px-3 py-2 mb-2"
+                  value={ttlSeconds}
+                  onChange={(e) => setTtlSeconds(e.target.value)}
+                  placeholder="Tempo de vida em segundos (ex: 3600)"
+                />
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50"
-                disabled={loading}
+                <label className="block text-sm text-gray-600 mb-1">Opções (JSON)</label>
+                <textarea
+                  className="w-full border rounded px-3 py-2 mb-2"
+                  value={optionsText}
+                  onChange={(e) => setOptionsText(e.target.value)}
+                  rows={4}
+                />
+
+                <div className="flex gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setLocalError(null);
+                      setGeneratedKey(null);
+                      try {
+                        const token = localStorage.getItem('authToken');
+                        if (!token) throw new Error('Token não encontrado');
+
+                        let parsedOptions = {};
+                        try {
+                          parsedOptions = JSON.parse(optionsText || '{}');
+                        } catch (e) {
+                          throw new Error('Opções inválidas: JSON malformado');
+                        }
+
+                        const payload: any = {
+                          type: 'TEMPORARY_30DAYS',
+                          ttlSeconds: Number(ttlSeconds) || undefined,
+                          options: parsedOptions,
+                        };
+
+                        const res = await fetch('/api/licenses', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify(payload),
+                        });
+
+                        if (!res.ok) {
+                          const txt = await res.text();
+                          throw new Error(txt || 'Falha ao criar chave');
+                        }
+
+                        const data = await res.json();
+                        setGeneratedKey(data.key);
+                      } catch (err: any) {
+                        setLocalError(err?.message || 'Erro ao gerar chave');
+                      }
+                    }}
+                    className="bg-whatsapp text-white px-3 py-2 rounded"
+                  >
+                    Gerar senha
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // finalizar modo admin e fechar modal
+                      setIsAdminMode(false);
+                      onClose && onClose();
+                    }}
+                    className="px-3 py-2 rounded border"
+                  >
+                    Continuar para o sistema
+                  </button>
+                </div>
+
+                {generatedKey && (
+                  <div className="mt-3 p-2 border rounded bg-gray-50 text-sm break-words">
+                    <div className="font-semibold">Senha gerada (copie e salve agora)</div>
+                    <div className="mt-1 text-green-700">{generatedKey}</div>
+                  </div>
+                )}
+              </div>
+            )}
               >
                 {loading ? 'Entrando...' : 'Entrar'}
               </button>
