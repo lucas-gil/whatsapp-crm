@@ -46,6 +46,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
     const init = async () => {
       try {
+        const currentBuild =
+          process.env.NEXT_PUBLIC_APP_BUILD ||
+          process.env.NEXT_PUBLIC_GIT_SHA ||
+          process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
+          process.env.NEXT_PUBLIC_APP_NAME ||
+          'dev';
+
+        const saved = localStorage.getItem('app_build');
+        if (saved && saved !== currentBuild) {
+          // app was updated — force re-login
+          try {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('auth_admin_mode');
+          } catch (e) {}
+        }
+        try {
+          localStorage.setItem('app_build', String(currentBuild));
+        } catch (e) {}
+      } catch (e) {
+        // ignore if localStorage not available
+      }
+
+      try {
         const stored = localStorage.getItem('authToken');
         if (stored) {
           const api = getApiBase();
