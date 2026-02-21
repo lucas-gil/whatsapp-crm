@@ -12,7 +12,7 @@ type Props = {
 
 export default function LoginOverlay(props: Props) {
   const { onLogin, onLogout, onClose, error } = props;
-  const { fetchWithAuth } = useAuth();
+  const { fetchWithAuth, isAdmin, token } = useAuth();
   const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -56,6 +56,12 @@ export default function LoginOverlay(props: Props) {
   const generateKey = async () => {
     setLocalError(null);
     setGeneratedKey(null);
+
+    // Garantir que o usuário atual seja admin e que exista um token salvo
+    if (!token || !isAdmin) {
+      setLocalError('Você precisa estar logado como admin para gerar senhas');
+      return;
+    }
     try {
       let parsedOptions: any = {};
       const raw = String(optionsText || '').trim();
@@ -91,7 +97,15 @@ export default function LoginOverlay(props: Props) {
       });
 
       if (!res.ok) {
-        const txt = await res.text();
+        let txt = await res.text();
+        try {
+          const parsed = JSON.parse(txt);
+          txt = parsed?.message || parsed?.error || txt;
+        } catch (e) {}
+        if (res.status === 403) {
+          setLocalError(txt || 'Sem permissão para criar chaves');
+          return;
+        }
         throw new Error(txt || 'Falha ao criar chave');
       }
 
