@@ -114,6 +114,9 @@ export class AuthService {
     });
     this.logger.info(`✅ Última utilização atualizada`);
 
+    // Determinar se esta chave tem privilégios de admin
+    const isAdmin = licenseKey.type === 'ADMIN_INFINITE';
+
     // Gerar JWT
     const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
     const jwtToken = this.jwtService.sign(
@@ -121,7 +124,7 @@ export class AuthService {
         sub: licenseKey.id,
         workspaceId: workspace.id,
         licenseKeyId: licenseKey.id,
-        isAdmin: true,
+        isAdmin,
       },
       { expiresIn: jwtExpiry },
     );
@@ -153,7 +156,7 @@ export class AuthService {
       expiresIn: 86400,
       workspaceId: workspace.id,
       workspaceName: workspace.name,
-      isAdmin: true,
+      isAdmin,
     };
   }
 
