@@ -9,6 +9,7 @@ type AuthContextType = {
   isAdmin: boolean;
   loading: boolean;
   ready: boolean; // initial check done
+  needsLogin: boolean;
   error: string | null;
   login: (key: string) => Promise<LoginResponse>;
   logout: () => Promise<void>;
@@ -40,6 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,10 +82,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!mounted) return;
             setToken(stored);
             setIsAdmin(Boolean(data?.isAdmin));
+            setNeedsLogin(false);
           } else {
             localStorage.removeItem('authToken');
             setToken(null);
             setIsAdmin(false);
+            setNeedsLogin(true);
           }
         }
       } catch (err) {
@@ -141,6 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setToken(newToken);
       setIsAdmin(Boolean(data.isAdmin));
+      setNeedsLogin(false);
       return data as LoginResponse;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
@@ -166,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('auth_admin_mode');
     setToken(null);
     setIsAdmin(false);
+    setNeedsLogin(true);
   };
 
   const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
@@ -173,12 +179,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!stored) throw new Error('Not authenticated');
     const headers = new Headers(init?.headers || {});
     headers.set('Authorization', `Bearer ${stored}`);
-    return fetch(input, { ...init, headers });
+    const res = await fetch(input, { ...init, headers });
+    if (res.status === 401) {
+      // token invalid or license expired — force logout and require login
+      try {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('auth_admin_mode');
+      } catch (e) {}
+      setToken(null);
+      setIsAdmin(false);
+      setNeedsLogin(true);
+    }
+    return res;
   };
 
   const value = useMemo(
-    () => ({ token, isAdmin, loading, ready, error, login, logout, fetchWithAuth }),
-    [token, isAdmin, loading, ready, error]
+    () => ({ token, isAdmin, loading, ready, needsLogin, error, login, logout, fetchWithAuth }),
+    [token, isAdmin, loading, ready, needsLogin, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
