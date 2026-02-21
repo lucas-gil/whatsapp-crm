@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST='{"app\\\\dashboard\\\\disparos\\\\page.tsx -> @/components/GeminiConfigModal":{"id":2531,"files":["static/chunks/531.d1ec79ee147f9615.js"]},"app\\\\dashboard\\\\page.tsx -> @/components/LoginOverlay":{"id":6482,"files":["static/chunks/482.949ebb5e1fc1730d.js"]}}';

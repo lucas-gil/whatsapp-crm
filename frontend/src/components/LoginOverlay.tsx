@@ -4,57 +4,124 @@ import { useState } from 'react';
 
 type Props = {
   onLogin: (key: string, workspace?: string) => Promise<void>;
+  onLogout?: () => void;
+  onClose?: () => void;
   error?: string | null;
 };
 
-export default function LoginOverlay({ onLogin, error }: Props) {
+export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Props) {
   const [key, setKey] = useState('');
   const [workspace, setWorkspace] = useState('default');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
+    if (key.trim().length === 0) {
+      setLocalError('Você deve informar a chave de acesso');
+      return;
+    }
+
     setLoading(true);
     try {
       await onLogin(key.trim(), workspace.trim() || 'default');
+      onClose && onClose();
+    } catch (err: any) {
+      const msg = err?.message || 'Erro ao autenticar';
+      setLocalError(msg.replace(/\"/g, ''));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleLogout = () => {
+    try {
+      onLogout && onLogout();
+      // garantir também limpeza local
+      localStorage.removeItem('authToken');
+    } catch (e) {
+      // ignore
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <form onSubmit={submit} className="w-full max-w-md bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-bold mb-4">Acesso ao sistema</h2>
-
-        <label className="block text-sm text-gray-600">Chave de Acesso</label>
-        <input
-          className="w-full border rounded px-3 py-2 mb-3"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="Digite a chave (ex: lucas9580)"
-          autoFocus
-        />
-
-        <label className="block text-sm text-gray-600">Workspace (opcional)</label>
-        <input
-          className="w-full border rounded px-3 py-2 mb-3"
-          value={workspace}
-          onChange={(e) => setWorkspace(e.target.value)}
-        />
-
-        {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50"
-            disabled={loading || key.trim().length === 0}
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm bg-white rounded-lg shadow-lg overflow-hidden">
+        <div className="px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Entrar no WhatsApp CRM</h2>
+          <p className="text-sm text-gray-500">Digite a chave de acesso para entrar</p>
         </div>
-      </form>
+
+        <form onSubmit={submit} className="p-6">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Chave de Acesso</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="w-full border rounded px-3 py-2 pr-10"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder="Digite a chave (ex: lucas9580)"
+                autoFocus
+              />
+              <button
+                type="button"
+                aria-label="Mostrar senha"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500"
+              >
+                {showPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Workspace (opcional)</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={workspace}
+              onChange={(e) => setWorkspace(e.target.value)}
+              placeholder="default"
+            />
+          </div>
+
+          {(localError || error) && (
+            <div className="mb-3 text-sm text-red-600">{localError || error}</div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50"
+                disabled={loading}
+              >
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-sm text-gray-600 hover:underline"
+              >
+                Limpar sessão
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { onClose && onClose(); }}
+                className="text-sm text-gray-500 hover:underline"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

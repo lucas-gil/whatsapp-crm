@@ -1,19 +1,38 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import LoginOverlay from './LoginOverlay';
 
 export default function AuthGate() {
-  const { token, loading, error, login } = useAuth();
+  const { token, loading, error, login, logout } = useAuth();
+  const [open, setOpen] = useState(false);
 
-  // Enquanto carrega, não mostrar nada para evitar flicker
+  useEffect(() => {
+    if (!loading && !token) setOpen(true); // abrir automaticamente quando não autenticado
+  }, [loading, token]);
+
   if (loading) return null;
 
-  // Se não há token, mostrar overlay de login
-  if (!token) {
-    return <LoginOverlay onLogin={login} error={error} />;
-  }
+  return (
+    <>
+      {open && (
+        <LoginOverlay
+          onLogin={login}
+          onLogout={logout}
+          onClose={() => setOpen(false)}
+          error={error}
+        />
+      )}
 
-  return null;
+      {/* Floating button to open login modal (to switch account) */}
+      <button
+        onClick={() => setOpen(true)}
+        title="Abrir tela de login"
+        className="fixed z-40 right-4 bottom-4 bg-whatsapp text-white p-3 rounded-full shadow-lg hover:scale-105 transition"
+      >
+        🔐
+      </button>
+    </>
+  );
 }
