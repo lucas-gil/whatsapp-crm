@@ -26,6 +26,10 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
 
     setLoading(true);
     try {
+      // debug: registrar tentativa de login (sem expor chave completa nos logs)
+      // útil para diagnóstico no navegador remoto
+      // eslint-disable-next-line no-console
+      console.debug('LoginOverlay: submit', { keyPreview: key.trim().substring(0, 8) + '...' });
       await onLogin(key.trim(), workspace.trim() || 'default');
       onClose && onClose();
     } catch (err: any) {
@@ -65,6 +69,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="Digite a chave de acesso"
                 autoFocus
+                autoComplete="current-password"
               />
             </div>
           </div>
@@ -76,6 +81,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
               value={workspace}
               onChange={(e) => setWorkspace(e.target.value)}
               placeholder="default"
+              autoComplete="off"
             />
           </div>
 
