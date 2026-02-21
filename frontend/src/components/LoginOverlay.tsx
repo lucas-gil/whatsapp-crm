@@ -11,7 +11,6 @@ type Props = {
 
 export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Props) {
   const [key, setKey] = useState('');
-  const [workspace, setWorkspace] = useState('default');
   const [loading, setLoading] = useState(false);
   // não mostrar a senha por padrão nem oferecer toggle
   const [localError, setLocalError] = useState<string | null>(null);
@@ -30,7 +29,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
       // útil para diagnóstico no navegador remoto
       // eslint-disable-next-line no-console
       console.debug('LoginOverlay: submit', { keyPreview: key.trim().substring(0, 8) + '...' });
-      await onLogin(key.trim(), workspace.trim() || 'default');
+      await onLogin(key.trim());
       onClose && onClose();
     } catch (err: any) {
       const msg = err?.message || 'Erro ao autenticar';
@@ -74,16 +73,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
             </div>
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Workspace (opcional)</label>
-            <input
-              className="w-full border rounded px-3 py-2"
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              placeholder="default"
-              autoComplete="off"
-            />
-          </div>
+          {/* Workspace removido temporariamente para compatibilidade com backends antigos */}
 
           {(localError || error) && (
             <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>
