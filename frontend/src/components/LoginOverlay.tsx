@@ -40,6 +40,9 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
       if (data?.isAdmin) {
         // permanecer no modal e mostrar opções de admin para gerar senhas
         setIsAdminMode(true);
+        try {
+          localStorage.setItem('auth_admin_mode', '1');
+        } catch (e) {}
         return;
       }
 
@@ -57,6 +60,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
       onLogout && onLogout();
       // garantir também limpeza local
       localStorage.removeItem('authToken');
+      try { localStorage.removeItem('auth_admin_mode'); } catch (e) {}
     } catch (e) {
       // ignore
     }
@@ -161,6 +165,9 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                     onClick={() => {
                       // finalizar modo admin e fechar modal
                       setIsAdminMode(false);
+                      try {
+                        localStorage.removeItem('auth_admin_mode');
+                      } catch (e) {}
                       onClose && onClose();
                     }}
                     className="px-3 py-2 rounded border"

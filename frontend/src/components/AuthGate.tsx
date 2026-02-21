@@ -45,6 +45,18 @@ export default function AuthGate({ children }: PropsWithChildren) {
     );
   }
 
+  // If token just appeared, close login modal unless admin mode is active
+  useEffect(() => {
+    if (token) {
+      try {
+        const adminFlag = localStorage.getItem('auth_admin_mode');
+        if (!adminFlag) setOpen(false);
+      } catch (e) {
+        setOpen(false);
+      }
+    }
+  }, [token]);
+
   // token exists: render children and a floating button to re-open login modal
   return (
     <>
