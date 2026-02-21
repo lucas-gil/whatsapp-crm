@@ -7,10 +7,13 @@ import {
   Body,
   Request,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 import { LicenseService } from './license.service';
 import { CreateLicenseDto } from './dto/create-license.dto';
 
+@UseGuards(JwtAuthGuard)
 @Controller('licenses')
 export class LicenseController {
   constructor(private licenseService: LicenseService) {}
