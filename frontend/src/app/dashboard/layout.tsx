@@ -31,6 +31,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <a href="/dashboard/admin" className="block px-4 py-2 rounded hover:bg-whatsapp-dark">
             👨‍💼 Admin
           </a>
+          <a href="/dashboard/admin/billing" className="block px-6 py-2 rounded hover:bg-whatsapp-dark text-sm">
+            💳 Painel de Cobrança
+          </a>
         </nav>
       </div>
 
