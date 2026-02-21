@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type LoginResponse = { accessToken: string; isAdmin?: boolean } & Record<string, any>;
