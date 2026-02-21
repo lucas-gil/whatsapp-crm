@@ -40,13 +40,15 @@ export default function AuthGate() {
         />
       )}
 
-      {/* Floating button to open login modal (to switch account) */}
+      {/* Prominent floating button to open login modal (to switch account) */}
       <button
+        id="open-login-btn"
         onClick={() => setOpen(true)}
         title="Abrir tela de login"
-        className="fixed z-40 right-4 bottom-4 bg-whatsapp text-white p-3 rounded-full shadow-lg hover:scale-105 transition"
+        style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 2147483647 }}
+        className="bg-whatsapp text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
       >
-        🔐
+        <span style={{ fontSize: 18, lineHeight: '18px' }}>🔐</span>
       </button>
     </>
   );
