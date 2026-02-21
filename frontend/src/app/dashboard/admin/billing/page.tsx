@@ -25,19 +25,19 @@ export default function BillingAdminPage() {
         </div>
 
         <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Link href="/dashboard/admin/billing/clients" className="block bg-white rounded p-4 shadow">
+          <Link href="/dashboard/admin/billing/clients" prefetch={false} className="block bg-white rounded p-4 shadow">
             <p className="font-semibold">Clientes</p>
             <p className="text-sm text-gray-500">Gerenciar clientes e vencimentos</p>
           </Link>
-          <Link href="/dashboard/admin/billing/charges" className="block bg-white rounded p-4 shadow">
+          <Link href="/dashboard/admin/billing/charges" prefetch={false} className="block bg-white rounded p-4 shadow">
             <p className="font-semibold">Cobranças</p>
             <p className="text-sm text-gray-500">Calendário / Lista / Kanban</p>
           </Link>
-          <Link href="/dashboard/admin/billing/campaigns" className="block bg-white rounded p-4 shadow">
+          <Link href="/dashboard/admin/billing/campaigns" prefetch={false} className="block bg-white rounded p-4 shadow">
             <p className="font-semibold">Campanhas</p>
             <p className="text-sm text-gray-500">Envio em lote com limites</p>
           </Link>
-          <Link href="/dashboard/admin/billing/inbox" className="block bg-white rounded p-4 shadow">
+          <Link href="/dashboard/admin/billing/inbox" prefetch={false} className="block bg-white rounded p-4 shadow">
             <p className="font-semibold">Caixa de entrada</p>
             <p className="text-sm text-gray-500">Respostas dos clientes</p>
           </Link>

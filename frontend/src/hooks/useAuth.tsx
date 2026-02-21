@@ -74,26 +74,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const stored = localStorage.getItem('authToken');
         if (stored) {
           const api = getApiBase();
-          const res = await fetch(`${api}/auth/me`, {
-            headers: { Authorization: `Bearer ${stored}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (!mounted) return;
-            setToken(stored);
-            setIsAdmin(Boolean(data?.isAdmin));
-            setNeedsLogin(false);
-          } else {
-            localStorage.removeItem('authToken');
+          try {
+            const res = await fetch(`${api}/auth/me`, {
+              headers: { Authorization: `Bearer ${stored}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (!mounted) return;
+              setToken(stored);
+              setIsAdmin(Boolean(data?.isAdmin));
+              setNeedsLogin(false);
+            } else {
+              // token invalid on server — clear and require login
+              try { localStorage.removeItem('authToken'); } catch (e) {}
+              setToken(null);
+              setIsAdmin(false);
+              setNeedsLogin(true);
+            }
+          } catch (err) {
+            // network error or unreachable backend — clear stored token to avoid stale state
+            try { localStorage.removeItem('authToken'); } catch (e) {}
             setToken(null);
             setIsAdmin(false);
             setNeedsLogin(true);
+            // eslint-disable-next-line no-console
+            console.debug('Auth init network error', err);
           }
         }
       } catch (err) {
-        // ignore network errors here — user will login manually
-        // eslint-disable-next-line no-console
-        console.debug('Auth init error', err);
+        // ignore localStorage errors
       } finally {
         if (!mounted) return;
         setLoading(false);
