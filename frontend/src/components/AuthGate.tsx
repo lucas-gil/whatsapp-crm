@@ -34,6 +34,45 @@ export default function AuthGate() {
     }
   }, [loading]);
 
+  // Wrap global fetch to avoid making unauthenticated API calls while no token
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ((window as any).__auth_fetch_wrapped) return;
+
+    const originalFetch = window.fetch.bind(window);
+
+    (window as any).fetch = async (input: RequestInfo, init?: RequestInit) => {
+      try {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : '';
+        // Only intercept internal API calls
+        const isApi = url.startsWith('/api') || url.includes('/api/');
+        if (isApi) {
+          const token = localStorage.getItem('authToken');
+          if (!token) {
+            // Return a fake 401 Response to avoid real network request and 500s
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+          }
+          // inject Authorization header if not present
+          init = init || {};
+          init.headers = Object.assign({}, init.headers || {}, { Authorization: `Bearer ${token}` });
+        }
+        return originalFetch(input, init);
+      } catch (err) {
+        return originalFetch(input, init);
+      }
+    };
+
+    (window as any).__auth_fetch_wrapped = true;
+    return () => {
+      // restore original if needed
+      if ((window as any).__auth_fetch_wrapped) {
+        try {
+          // can't easily restore original without storing; leave wrapped for app lifetime
+        } catch (e) {}
+      }
+    };
+  }, []);
+
   if (loading) return null;
 
   return (

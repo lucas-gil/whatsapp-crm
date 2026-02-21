@@ -202,13 +202,9 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => { onClose && onClose(); }}
-                className="text-sm text-gray-500 hover:underline"
-              >
-                Fechar
-              </button>
+              {/* Fechar removido: o modal não pode ser fechado manualmente; apenas fechará após login
+                  ou quando o admin terminar as ações e clicar em "Continuar para o sistema" */}
+              <span className="text-sm text-gray-400">Protegido</span>
             </div>
           </div>
         </form>
