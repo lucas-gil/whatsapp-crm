@@ -47,6 +47,11 @@ export default function AuthGate() {
         // Only intercept internal API calls
         const isApi = url.startsWith('/api') || url.includes('/api/');
         if (isApi) {
+          // Allow auth login endpoint to proceed without token
+          if (url.includes('/api/auth/login') || url.includes('/api/auth/generate') || url.includes('/api/auth/default-token')) {
+            return originalFetch(input, init);
+          }
+
           const token = localStorage.getItem('authToken');
           if (!token) {
             // Return a fake 401 Response to avoid real network request and 500s
