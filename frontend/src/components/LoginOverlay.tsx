@@ -64,8 +64,8 @@ export default function LoginOverlay(props: Props) {
 
   const handleLogout = () => {
     try {
+      try { localStorage.removeItem('authToken'); localStorage.removeItem('auth_admin_mode'); } catch (e) {}
       onLogout && onLogout();
-      // token is in-memory; just call onLogout
     } catch (e) {}
   };
 
