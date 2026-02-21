@@ -17,8 +17,8 @@ export class LicenseController {
 
   @Post()
   async createLicense(@Body() dto: CreateLicenseDto, @Request() req: any) {
-    // Apenas admin pode criar chaves
-    if (!req.user.isAdmin) {
+    // Verificar autenticação e permissão de admin
+    if (!req.user || !req.user.isAdmin) {
       throw new ForbiddenException('Apenas admin pode criar chaves');
     }
 
@@ -27,8 +27,8 @@ export class LicenseController {
 
   @Get()
   async listLicenses(@Request() req: any) {
-    // Apenas admin pode listar
-    if (!req.user.isAdmin) {
+    // Verificar autenticação e permissão de admin
+    if (!req.user || !req.user.isAdmin) {
       throw new ForbiddenException('Apenas admin pode listar chaves');
     }
 
@@ -37,7 +37,7 @@ export class LicenseController {
 
   @Delete(':id')
   async revokeLicense(@Param('id') id: string, @Request() req: any) {
-    if (!req.user.isAdmin) {
+    if (!req.user || !req.user.isAdmin) {
       throw new ForbiddenException('Apenas admin pode revogar chaves');
     }
 
