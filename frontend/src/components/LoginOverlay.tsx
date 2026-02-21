@@ -177,6 +177,17 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                 )}
               </div>
             )}
+
+          {(localError || error) && (
+            <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50"
+                disabled={loading}
               >
                 {loading ? 'Entrando...' : 'Entrar'}
               </button>
