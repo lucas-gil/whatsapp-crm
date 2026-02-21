@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import LoginOverlay from './LoginOverlay';
 
@@ -8,9 +8,16 @@ export default function AuthGate() {
   const { token, loading, error, login, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    // Forçar abertura do modal assim que inicializar (independente de token)
-    if (!loading) setOpen(true);
+    // Abrir o modal apenas na primeira vez que o carregamento inicial terminar.
+    // Isso evita que o modal seja reaberto automaticamente após um login/logout
+    // que altera o estado `loading`.
+    if (!initializedRef.current && !loading) {
+      setOpen(true);
+      initializedRef.current = true;
+    }
 
     // Se a URL contém ?forceLogin=1, garantir abertura do modal e limpar o param
     try {
