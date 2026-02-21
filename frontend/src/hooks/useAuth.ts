@@ -1,126 +1,163 @@
-import { useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-export function useAuth() {
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type LoginResponse = { accessToken: string; isAdmin?: boolean } & Record<string, any>;
 
-  const getApi = () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-    let api = apiBase ? apiBase.replace(/\/$/, '') : '/api';
+type AuthContextType = {
+  token: string | null;
+  isAdmin: boolean;
+  loading: boolean;
+  ready: boolean; // initial check done
+  error: string | null;
+  login: (key: string) => Promise<LoginResponse>;
+  logout: () => Promise<void>;
+  fetchWithAuth: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+};
 
-    if (typeof window !== 'undefined' && apiBase) {
-      try {
-        const apiUrl = new URL(apiBase, window.location.origin);
-        if (apiUrl.host !== window.location.host || apiUrl.hostname === 'localhost') {
-          api = '/api';
-        }
-      } catch (err) {
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function getApiBase() {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  let api = apiBase ? apiBase.replace(/\/$/, '') : '/api';
+
+  if (typeof window !== 'undefined' && apiBase) {
+    try {
+      const apiUrl = new URL(apiBase, window.location.origin);
+      if (apiUrl.host !== window.location.host || apiUrl.hostname === 'localhost') {
         api = '/api';
       }
+    } catch (err) {
+      api = '/api';
     }
+  }
 
-    return api;
-  };
+  return api;
+}
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [token, setToken] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const initAuth = async () => {
+    let mounted = true;
+    const init = async () => {
       try {
-        const api = getApi();
-
-        // Verificar se já tem token no localStorage
-        const storedToken = localStorage.getItem('authToken');
-        if (storedToken) {
-          const meResponse = await fetch(`${api}/auth/me`, {
-            headers: { Authorization: `Bearer ${storedToken}` },
+        const stored = localStorage.getItem('authToken');
+        if (stored) {
+          const api = getApiBase();
+          const res = await fetch(`${api}/auth/me`, {
+            headers: { Authorization: `Bearer ${stored}` },
           });
-
-          if (meResponse.ok) {
-            setToken(storedToken);
-            return;
+          if (res.ok) {
+            const data = await res.json();
+            if (!mounted) return;
+            setToken(stored);
+            setIsAdmin(Boolean(data?.isAdmin));
+          } else {
+            localStorage.removeItem('authToken');
+            setToken(null);
+            setIsAdmin(false);
           }
-
-          localStorage.removeItem('authToken');
         }
-
-        // Não obter automaticamente token padrão — exigir que usuário faça login
       } catch (err) {
-        console.error('Erro ao inicializar autenticação:', err);
+        // ignore network errors here — user will login manually
+        // eslint-disable-next-line no-console
+        console.debug('Auth init error', err);
       } finally {
+        if (!mounted) return;
         setLoading(false);
+        setReady(true);
       }
     };
 
-    initAuth();
+    init();
+
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === 'authToken') {
+        setToken(ev.newValue);
+      }
+      if (ev.key === 'auth_admin_mode' && ev.newValue == null) {
+        // admin mode cleared
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
-  const login = async (key: string, workspaceSlug = 'default') => {
+  const login = async (key: string) => {
     setLoading(true);
     setError(null);
     try {
-      const api = getApi();
-      const url = `${api}/auth/login`;
-      const payload = { key };
-      // debug logs para diagnóstico
-      // eslint-disable-next-line no-console
-      console.debug('useAuth.login ->', { url, payload });
-
-      const res = await fetch(url, {
+      const api = getApiBase();
+      const res = await fetch(`${api}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ key }),
       });
-
-      // tentar extrair mensagem de erro JSON/texto para exibir no frontend
       if (!res.ok) {
-        let bodyText = await res.text();
+        let txt = await res.text();
         try {
-          const parsed = JSON.parse(bodyText);
-          if (parsed?.message) {
-            bodyText = Array.isArray(parsed.message) ? parsed.message.join(', ') : parsed.message;
-          } else if (parsed?.error) {
-            bodyText = parsed.error;
-          }
-        } catch (e) {
-          // bodyText permanece como texto bruto
-        }
-        // eslint-disable-next-line no-console
-        console.warn('useAuth.login error response', { status: res.status, bodyText });
-        throw new Error(bodyText || 'Falha no login');
+          const parsed = JSON.parse(txt);
+          txt = parsed?.message || parsed?.error || txt;
+        } catch (e) {}
+        throw new Error(txt || `Login failed (${res.status})`);
       }
-
       const data = await res.json();
       const newToken = data.accessToken;
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
-      return data;
+      setIsAdmin(Boolean(data.isAdmin));
+      return data as LoginResponse;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       setError(msg);
-      // eslint-disable-next-line no-console
-      console.error('useAuth.login caught', err);
       throw err;
     } finally {
       setLoading(false);
+      setReady(true);
     }
   };
 
   const logout = async () => {
-    const api = getApi();
-    const storedToken = localStorage.getItem('authToken');
     try {
-      if (storedToken) {
-        await fetch(`${api}/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${storedToken}` },
-        });
+      const api = getApiBase();
+      const stored = localStorage.getItem('authToken');
+      if (stored) {
+        await fetch(`${api}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${stored}` } });
       }
     } catch (e) {
       // ignore
     }
     localStorage.removeItem('authToken');
+    localStorage.removeItem('auth_admin_mode');
     setToken(null);
+    setIsAdmin(false);
   };
 
-  return { token, loading, error, login, logout } as const;
+  const fetchWithAuth = async (input: RequestInfo, init?: RequestInit) => {
+    const stored = localStorage.getItem('authToken');
+    if (!stored) throw new Error('Not authenticated');
+    const headers = new Headers(init?.headers || {});
+    headers.set('Authorization', `Bearer ${stored}`);
+    return fetch(input, { ...init, headers });
+  };
+
+  const value = useMemo(
+    () => ({ token, isAdmin, loading, ready, error, login, logout, fetchWithAuth }),
+    [token, isAdmin, loading, ready, error]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }

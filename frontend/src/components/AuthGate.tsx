@@ -5,14 +5,14 @@ import { useAuth } from '@/hooks/useAuth';
 import LoginOverlay from './LoginOverlay';
 
 export default function AuthGate({ children }: PropsWithChildren) {
-  const { token, loading, error, login, logout } = useAuth();
+  const { token, ready, loading, error, login, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
   const initializedRef = useRef(false);
 
   useEffect(() => {
     // Abrir o modal apenas na primeira vez que o carregamento inicial terminar.
-    if (!initializedRef.current && !loading) {
+    if (!initializedRef.current && ready) {
       setOpen(true);
       initializedRef.current = true;
     }
@@ -29,7 +29,7 @@ export default function AuthGate({ children }: PropsWithChildren) {
     } catch (e) {
       // ignore
     }
-  }, [loading]);
+  }, [ready]);
 
   // If token just appeared, close login modal unless admin mode is active
   useEffect(() => {
@@ -43,8 +43,8 @@ export default function AuthGate({ children }: PropsWithChildren) {
     }
   }, [token]);
 
-  // If still loading initial auth state, render nothing
-  if (loading) return null;
+  // If initial auth check not finished, render nothing to avoid FOUC
+  if (!ready) return null;
 
   // If no token, block rendering children and show modal
   if (!token) {

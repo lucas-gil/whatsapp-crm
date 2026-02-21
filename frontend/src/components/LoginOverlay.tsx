@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 type Props = {
-  onLogin: (key: string, workspace?: string) => Promise<void>;
+  onLogin: (key: string) => Promise<any>;
   onLogout?: () => void;
   onClose?: () => void;
   error?: string | null;
 };
 
 export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Props) {
+  const { fetchWithAuth } = useAuth();
   const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
   // não mostrar a senha por padrão nem oferecer toggle
@@ -119,9 +121,6 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                       setLocalError(null);
                       setGeneratedKey(null);
                       try {
-                        const token = localStorage.getItem('authToken');
-                        if (!token) throw new Error('Token não encontrado');
-
                         let parsedOptions = {};
                         try {
                           parsedOptions = JSON.parse(optionsText || '{}');
@@ -135,12 +134,9 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                           options: parsedOptions,
                         };
 
-                        const res = await fetch('/api/licenses', {
+                        const res = await fetchWithAuth('/api/licenses', {
                           method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                          },
+                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify(payload),
                         });
 
