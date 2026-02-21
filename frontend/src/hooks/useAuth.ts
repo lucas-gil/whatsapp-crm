@@ -62,7 +62,9 @@ export function useAuth() {
       const res = await fetch(`${api}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, workspaceSlug }),
+        // Enviar apenas a chave para manter compatibilidade com backends
+        // que ainda não aceitam o campo `workspaceSlug` (evita 400 Bad Request)
+        body: JSON.stringify({ key }),
       });
 
       if (!res.ok) {
