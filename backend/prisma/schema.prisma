@@ -35,6 +35,11 @@ model Workspace {
   pollCampaigns PollCampaign[]
   geminiSettings GeminiSettings?
   whatsappSettings WhatsAppSettings?
+  // Billing relations
+  billingClients BillingClient[]
+  charges       Charge[]
+  billingTemplates BillingTemplate[]
+  billingMessageLogs MessageLog[]
 
   @@index([slug])
 }
@@ -169,6 +174,8 @@ model Lead {
   conversations   Conversation[]
   broadcasts      BroadcastRecipient[]
   orders          Order[]
+  // Billing relation (opposite side of BillingClient.lead)
+  billingClient   BillingClient?
 
   @@unique([workspaceId, phoneNumber])
   @@index([workspaceId])
@@ -290,6 +297,8 @@ model Message {
 
   // Relations
   attachments     Attachment[]
+  // Billing message logs (opposite side of MessageLog.message)
+  billingMessageLogs MessageLog[]
 
   @@index([workspaceId])
   @@index([conversationId])
