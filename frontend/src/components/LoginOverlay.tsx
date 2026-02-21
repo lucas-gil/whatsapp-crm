@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 type Props = {
@@ -10,48 +10,36 @@ type Props = {
   error?: string | null;
 };
 
-export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Props) {
+export default function LoginOverlay(props: Props) {
+  const { onLogin, onLogout, onClose, error } = props;
   const { fetchWithAuth } = useAuth();
   const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
-  // não mostrar a senha por padrão nem oferecer toggle
   const [localError, setLocalError] = useState<string | null>(null);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [ttlSeconds, setTtlSeconds] = useState<string>('2592000'); // padrão 30 dias
+  const [ttlSeconds, setTtlSeconds] = useState<string>('2592000');
   const [optionsText, setOptionsText] = useState<string>('{}');
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: any) => {
     e.preventDefault();
     setLocalError(null);
-    if (key.trim().length === 0) {
+    if (String(key || '').trim().length === 0) {
       setLocalError('Você deve informar a chave de acesso');
       return;
     }
 
     setLoading(true);
     try {
-      // debug: registrar tentativa de login (sem expor chave completa nos logs)
-      // útil para diagnóstico no navegador remoto
-      // eslint-disable-next-line no-console
-      console.debug('LoginOverlay: submit', { keyPreview: key.trim().substring(0, 8) + '...' });
-
-      // onLogin agora retorna os dados do servidor (incluindo isAdmin)
-      const data: any = await onLogin(key.trim());
-
+      const data: any = await onLogin(String(key).trim());
       if (data?.isAdmin) {
-        // permanecer no modal e mostrar opções de admin para gerar senhas
         setIsAdminMode(true);
-        try {
-          localStorage.setItem('auth_admin_mode', '1');
-        } catch (e) {}
+        try { localStorage.setItem('auth_admin_mode', '1'); } catch (e) {}
         return;
       }
-
       onClose && onClose();
     } catch (err: any) {
-      const msg = err?.message || 'Erro ao autenticar';
-      setLocalError(msg.replace(/\"/g, ''));
+      setLocalError(err?.message || 'Erro ao autenticar');
     } finally {
       setLoading(false);
     }
@@ -60,11 +48,57 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
   const handleLogout = () => {
     try {
       onLogout && onLogout();
-      // garantir também limpeza local
       localStorage.removeItem('authToken');
       try { localStorage.removeItem('auth_admin_mode'); } catch (e) {}
-    } catch (e) {
-      // ignore
+    } catch (e) {}
+  };
+
+  const generateKey = async () => {
+    setLocalError(null);
+    setGeneratedKey(null);
+    try {
+      let parsedOptions: any = {};
+      const raw = String(optionsText || '').trim();
+      let durationOverride: number | undefined = undefined;
+
+      if (raw.length > 0) {
+        try {
+          parsedOptions = JSON.parse(raw);
+        } catch (e) {
+          const asNum = Number(raw);
+          if (!Number.isNaN(asNum)) {
+            durationOverride = asNum;
+          } else {
+            const m = raw.match(/-?\d+/);
+            if (m) durationOverride = Number(m[0]);
+            else throw new Error('Opções inválidas: JSON malformado ou valor não numérico');
+          }
+        }
+      }
+
+      const payload: any = {
+        type: 'TEMPORARY_30DAYS',
+        ttlSeconds: Number(ttlSeconds) || undefined,
+        options: parsedOptions,
+      };
+
+      if (durationOverride !== undefined) payload.ttlSeconds = Number(durationOverride);
+
+      const res = await fetchWithAuth('/api/licenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Falha ao criar chave');
+      }
+
+      const data = await res.json();
+      setGeneratedKey(data.key);
+    } catch (err: any) {
+      setLocalError(err?.message || 'Erro ao gerar chave');
     }
   };
 
@@ -84,7 +118,7 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                 type="password"
                 className="w-full border rounded px-3 py-2"
                 value={key}
-                onChange={(e) => setKey(e.target.value)}
+                onChange={(e) => setKey(String(e.target.value))}
                 placeholder="Digite a chave de acesso"
                 autoFocus
                 autoComplete="current-password"
@@ -92,147 +126,66 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
             </div>
           </div>
 
-          {/* Workspace removido temporariamente para compatibilidade com backends antigos */}
+          {isAdminMode && (
+            <div className="mb-4 border-t pt-4">
+              <h3 className="text-sm font-semibold mb-2">Modo Admin — Gerar nova senha</h3>
+              <label className="block text-sm text-gray-600 mb-1">Duração (segundos)</label>
+              <input
+                className="w-full border rounded px-3 py-2 mb-2"
+                value={ttlSeconds}
+                onChange={(e) => setTtlSeconds(String(e.target.value))}
+                placeholder="Tempo de vida em segundos (ex: 3600)"
+              />
 
-            {/* Admin mode: mostrar gerador de senhas */}
-            {isAdminMode && (
-              <div className="mb-4 border-t pt-4">
-                <h3 className="text-sm font-semibold mb-2">Modo Admin — Gerar nova senha</h3>
-                <label className="block text-sm text-gray-600 mb-1">Duração (segundos)</label>
-                <input
-                  className="w-full border rounded px-3 py-2 mb-2"
-                  value={ttlSeconds}
-                  onChange={(e) => setTtlSeconds(e.target.value)}
-                  placeholder="Tempo de vida em segundos (ex: 3600)"
-                />
+              <label className="block text-sm text-gray-600 mb-1">Opções (JSON)</label>
+              <textarea
+                className="w-full border rounded px-3 py-2 mb-2"
+                value={optionsText}
+                onChange={(e) => setOptionsText(String(e.target.value))}
+                rows={4}
+              />
 
-                <label className="block text-sm text-gray-600 mb-1">Opções (JSON)</label>
-                <textarea
-                  className="w-full border rounded px-3 py-2 mb-2"
-                  value={optionsText}
-                  onChange={(e) => setOptionsText(e.target.value)}
-                  rows={4}
-                />
+              <div className="flex gap-2 items-center">
+                <button type="button" onClick={generateKey} className="bg-whatsapp text-white px-3 py-2 rounded">
+                  Gerar senha
+                </button>
 
-                <div className="flex gap-2 items-center">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setLocalError(null);
-                      setGeneratedKey(null);
-                      try {
-                        let parsedOptions = {};
-                        try {
-                            // permitir que o usuário digite apenas um número (ex: 20),
-                            // um JSON válido, ou algo com chaves como {20} — tentamos extrair
-                            // um número se JSON falhar.
-                            const raw = optionsText?.trim() || '';
-                            parsedOptions = {};
-                            let durationOverride: number | undefined = undefined;
-
-                            if (raw.length > 0) {
-                              try {
-                                parsedOptions = JSON.parse(raw);
-                              } catch (e) {
-                                // tentar interpretar como número direto (ex: "20")
-                                const asNum = Number(raw);
-                                if (!Number.isNaN(asNum)) {
-                                  durationOverride = asNum;
-                                } else {
-                                  // tentar extrair primeiro número encontrado em qualquer texto (ex: "{20}")
-                                  const m = raw.match(/-?\d+/);
-                                  if (m) {
-                                    durationOverride = Number(m[0]);
-                                  } else {
-                                    throw new Error('Opções inválidas: JSON malformado ou valor não numérico');
-                                  }
-                                }
-                              }
-                            }
-
-                          const payload: any = {
-                            type: 'TEMPORARY_30DAYS',
-                            ttlSeconds: Number(ttlSeconds) || undefined,
-                            options: parsedOptions,
-                          };
-
-                          if (durationOverride !== undefined) {
-                            payload.ttlSeconds = Number(durationOverride);
-                          }
-
-                        const res = await fetchWithAuth('/api/licenses', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(payload),
-                        });
-
-                        if (!res.ok) {
-                          const txt = await res.text();
-                          throw new Error(txt || 'Falha ao criar chave');
-                        }
-
-                        const data = await res.json();
-                        setGeneratedKey(data.key);
-                      } catch (err: any) {
-                        setLocalError(err?.message || 'Erro ao gerar chave');
-                      }
-                    }}
-                    className="bg-whatsapp text-white px-3 py-2 rounded"
-                  >
-                    Gerar senha
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // finalizar modo admin e fechar modal
-                      setIsAdminMode(false);
-                      try {
-                        localStorage.removeItem('auth_admin_mode');
-                      } catch (e) {}
-                      onClose && onClose();
-                    }}
-                    className="px-3 py-2 rounded border"
-                  >
-                    Continuar para o sistema
-                  </button>
-                </div>
-
-                {generatedKey && (
-                  <div className="mt-3 p-2 border rounded bg-gray-50 text-sm break-words">
-                    <div className="font-semibold">Senha gerada (copie e salve agora)</div>
-                    <div className="mt-1 text-green-700">{generatedKey}</div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminMode(false);
+                    try { localStorage.removeItem('auth_admin_mode'); } catch (e) {}
+                    onClose && onClose();
+                  }}
+                  className="px-3 py-2 rounded border"
+                >
+                  Continuar para o sistema
+                </button>
               </div>
-            )}
 
-          {(localError || error) && (
-            <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>
+              {generatedKey && (
+                <div className="mt-3 p-2 border rounded bg-gray-50 text-sm break-words">
+                  <div className="font-semibold">Senha gerada (copie e salve agora)</div>
+                  <div className="mt-1 text-green-700">{generatedKey}</div>
+                </div>
+              )}
+            </div>
           )}
+
+          {(localError || error) && <div className="mb-3 text-sm text-red-600 break-words">{localError || error}</div>}
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50"
-                disabled={loading}
-              >
+              <button type="submit" className="bg-whatsapp text-white px-4 py-2 rounded disabled:opacity-50" disabled={loading}>
                 {loading ? 'Entrando...' : 'Entrar'}
               </button>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="text-sm text-gray-600 hover:underline"
-              >
+              <button type="button" onClick={handleLogout} className="text-sm text-gray-600 hover:underline">
                 Limpar sessão
               </button>
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Fechar removido: o modal não pode ser fechado manualmente; apenas fechará após login
-                  ou quando o admin terminar as ações e clicar em "Continuar para o sistema" */}
               <span className="text-sm text-gray-400">Protegido</span>
             </div>
           </div>
