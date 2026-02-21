@@ -17,17 +17,18 @@ export class LicenseService {
     const keyHash = await HashUtil.hash(key);
     const keyPreview = HashUtil.generateKeyPreview(key);
 
-    // Calcular data de expiração
+    // Não definir expiresAt aqui — a expiração deverá começar quando a chave for ativada (primeiro uso).
+    // Em vez disso, armazenamos o ttl (em segundos) nas opções da chave para aplicar na ativação.
     let expiresAt: Date | null = null;
-    if (dto.ttlSeconds && dto.ttlSeconds > 0) {
-      expiresAt = new Date(Date.now() + dto.ttlSeconds * 1000);
+    const options = { ...(dto.options || {}) } as any;
+    if (dto.type === LicenseTypeEnum.TEMPORARY_12MIN) {
+      if (dto.ttlSeconds && dto.ttlSeconds > 0) options.ttlSeconds = dto.ttlSeconds;
+      else options.ttlSeconds = 12 * 60; // 12 minutos
+    } else if (dto.type === LicenseTypeEnum.TEMPORARY_30DAYS) {
+      if (dto.ttlSeconds && dto.ttlSeconds > 0) options.ttlSeconds = dto.ttlSeconds;
+      else options.ttlSeconds = 30 * 24 * 60 * 60; // 30 dias
     } else {
-      if (dto.type === LicenseTypeEnum.TEMPORARY_12MIN) {
-        expiresAt = new Date(Date.now() + 12 * 60 * 1000); // 12 minutos
-      } else if (dto.type === LicenseTypeEnum.TEMPORARY_30DAYS) {
-        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 dias
-      }
-      // ADMIN_INFINITE: expiresAt = null
+      // ADMIN_INFINITE: não tem ttl
     }
 
     const license = await this.prisma.licenseKey.create({
@@ -36,8 +37,9 @@ export class LicenseService {
         keyHash,
         keyPreview,
         type: dto.type as any,
+        // expiresAt intencionalmente null for temporary keys — will be set on first activation
         expiresAt,
-        options: dto.options || undefined,
+        options: Object.keys(options).length ? options : undefined,
       },
     });
 

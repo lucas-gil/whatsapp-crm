@@ -98,11 +98,24 @@ export class AuthService {
       throw new UnauthorizedException('Chave expirada');
     }
 
-    // Marcar primeira ativação se necessário
+    // Marcar primeira ativação se necessário.
+    // Se a chave tiver um ttl salvo em options, iniciamos a contagem de expiração agora.
     if (!licenseKey.activatedAt) {
+      const now = new Date();
+      let newData: any = { activatedAt: now };
+
+      try {
+        const ttlFromOptions = licenseKey.options && (licenseKey.options as any).ttlSeconds;
+        if (!licenseKey.expiresAt && ttlFromOptions && Number(ttlFromOptions) > 0) {
+          newData.expiresAt = new Date(Date.now() + Number(ttlFromOptions) * 1000);
+        }
+      } catch (e) {
+        // ignore malformed options
+      }
+
       await this.prisma.licenseKey.update({
         where: { id: licenseKey.id },
-        data: { activatedAt: new Date() },
+        data: newData,
       });
       this.logger.info(`✅ Primeira ativação marcada`);
     }
