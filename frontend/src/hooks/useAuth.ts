@@ -59,17 +59,34 @@ export function useAuth() {
     setError(null);
     try {
       const api = getApi();
-      const res = await fetch(`${api}/auth/login`, {
+      const url = `${api}/auth/login`;
+      const payload = { key };
+      // debug logs para diagnóstico
+      // eslint-disable-next-line no-console
+      console.debug('useAuth.login ->', { url, payload });
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Enviar apenas a chave para manter compatibilidade com backends
-        // que ainda não aceitam o campo `workspaceSlug` (evita 400 Bad Request)
-        body: JSON.stringify({ key }),
+        body: JSON.stringify(payload),
       });
 
+      // tentar extrair mensagem de erro JSON/texto para exibir no frontend
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || 'Falha no login');
+        let bodyText = await res.text();
+        try {
+          const parsed = JSON.parse(bodyText);
+          if (parsed?.message) {
+            bodyText = Array.isArray(parsed.message) ? parsed.message.join(', ') : parsed.message;
+          } else if (parsed?.error) {
+            bodyText = parsed.error;
+          }
+        } catch (e) {
+          // bodyText permanece como texto bruto
+        }
+        // eslint-disable-next-line no-console
+        console.warn('useAuth.login error response', { status: res.status, bodyText });
+        throw new Error(bodyText || 'Falha no login');
       }
 
       const data = await res.json();
@@ -77,7 +94,10 @@ export function useAuth() {
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      setError(msg);
+      // eslint-disable-next-line no-console
+      console.error('useAuth.login caught', err);
       throw err;
     } finally {
       setLoading(false);
