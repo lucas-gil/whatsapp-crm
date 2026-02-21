@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import dynamic from 'next/dynamic';
+
+const LoginOverlay = dynamic(() => import('@/components/LoginOverlay'), { ssr: false });
 
 export default function DashboardPage() {
-  const { token, loading: authLoading, error: authError } = useAuth();
+  const { token, loading: authLoading, error: authError, login } = useAuth();
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const api = apiBase
     ? apiBase.replace(/\/$/, '')
@@ -65,6 +68,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
+      {!authLoading && !token && (
+        <LoginOverlay onLogin={login} error={authError} />
+      )}
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
