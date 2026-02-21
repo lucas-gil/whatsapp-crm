@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function ConfiguracoesPage() {
   const [whatsappKey, setWhatsappKey] = useState('');
@@ -8,17 +8,50 @@ export default function ConfiguracoesPage() {
 
   const handleSave = async () => {
     try {
-      await fetch('/api/settings', {
+      // salvar WhatsApp
+      await fetch('/api/settings/whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ whatsappKey, geminiKey }),
+        body: JSON.stringify({ whatsappKey }),
       });
+
+      // salvar Gemini
+      await fetch('/api/settings/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: geminiKey }),
+      });
+
       alert('Configurações salvas!');
     } catch (err) {
       alert('Erro ao salvar configurações');
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const r1 = await fetch('/api/settings/whatsapp');
+        if (r1.ok) {
+          const j1 = await r1.json();
+          const d1 = j1?.data ?? j1;
+          setWhatsappKey(d1?.whatsappKey || '');
+        }
+
+        const r2 = await fetch('/api/settings/gemini');
+        if (r2.ok) {
+          const j2 = await r2.json();
+          const d2 = j2?.data ?? j2;
+          setGeminiKey(d2?.apiKey || '');
+        }
+      } catch (err) {
+        console.error('Erro ao carregar configurações', err);
+      }
+    }
+
+    load();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">

@@ -16,12 +16,17 @@ export class GeminiController {
 
   @Get()
   async getSettings(@Request() req: any) {
-    return this.geminiService.getSettings(req.user.workspaceId);
+    const workspaceId = req.user.workspaceId;
+    const licenseKeyId = req.user.licenseKeyId;
+    return this.geminiService.getSettings(workspaceId, licenseKeyId);
   }
 
   @Post()
   async updateSettings(@Body() data: any, @Request() req: any) {
-    return this.geminiService.updateSettings(req.user.workspaceId, data);
+    const workspaceId = req.user.workspaceId;
+    const licenseKeyId = req.user.licenseKeyId;
+    const isAdmin = !!req.user.isAdmin;
+    return this.geminiService.updateSettings(workspaceId, data, licenseKeyId, isAdmin);
   }
 
   @Post('test')

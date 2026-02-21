@@ -123,16 +123,42 @@ export default function LoginOverlay({ onLogin, onLogout, onClose, error }: Prop
                       try {
                         let parsedOptions = {};
                         try {
-                          parsedOptions = JSON.parse(optionsText || '{}');
-                        } catch (e) {
-                          throw new Error('Opções inválidas: JSON malformado');
-                        }
+                            // permitir que o usuário digite apenas um número (ex: 20),
+                            // um JSON válido, ou algo com chaves como {20} — tentamos extrair
+                            // um número se JSON falhar.
+                            const raw = optionsText?.trim() || '';
+                            parsedOptions = {};
+                            let durationOverride: number | undefined = undefined;
 
-                        const payload: any = {
-                          type: 'TEMPORARY_30DAYS',
-                          ttlSeconds: Number(ttlSeconds) || undefined,
-                          options: parsedOptions,
-                        };
+                            if (raw.length > 0) {
+                              try {
+                                parsedOptions = JSON.parse(raw);
+                              } catch (e) {
+                                // tentar interpretar como número direto (ex: "20")
+                                const asNum = Number(raw);
+                                if (!Number.isNaN(asNum)) {
+                                  durationOverride = asNum;
+                                } else {
+                                  // tentar extrair primeiro número encontrado em qualquer texto (ex: "{20}")
+                                  const m = raw.match(/-?\d+/);
+                                  if (m) {
+                                    durationOverride = Number(m[0]);
+                                  } else {
+                                    throw new Error('Opções inválidas: JSON malformado ou valor não numérico');
+                                  }
+                                }
+                              }
+                            }
+
+                          const payload: any = {
+                            type: 'TEMPORARY_30DAYS',
+                            ttlSeconds: Number(ttlSeconds) || undefined,
+                            options: parsedOptions,
+                          };
+
+                          if (durationOverride !== undefined) {
+                            payload.ttlSeconds = Number(durationOverride);
+                          }
 
                         const res = await fetchWithAuth('/api/licenses', {
                           method: 'POST',

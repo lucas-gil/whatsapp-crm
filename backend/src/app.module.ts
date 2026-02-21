@@ -33,6 +33,8 @@ import { AppService } from './app.service';
     WorkspaceModule,
     BroadcastModule,
     PollsModule,
+    // settings
+    require('./settings/settings.module').SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

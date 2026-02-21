@@ -15,13 +15,44 @@ export class GeminiService {
     private configService: ConfigService,
   ) {}
 
-  async getSettings(workspaceId: string) {
+  async getSettings(workspaceId: string, licenseKeyId?: string) {
+    // If a licenseKeyId is provided, try to read per-license options first
+    if (licenseKeyId) {
+      const license = await this.prisma.licenseKey.findUnique({ where: { id: licenseKeyId } });
+      if (license?.options && (license.options as any).gemini) {
+        return (license.options as any).gemini;
+      }
+    }
+
     return this.prisma.geminiSettings.findUnique({
       where: { workspaceId },
     });
   }
 
-  async updateSettings(workspaceId: string, data: any) {
+  async updateSettings(workspaceId: string, data: any, licenseKeyId?: string, isAdmin = false) {
+    // If licenseKeyId is provided and user is not admin, save settings into license.options.gemini
+    if (licenseKeyId && !isAdmin) {
+      const license = await this.prisma.licenseKey.findUnique({ where: { id: licenseKeyId } });
+      const currentOptions = (license?.options || {}) as any;
+      currentOptions.gemini = {
+        ...currentOptions.gemini,
+        isEnabled: data.isEnabled,
+        apiKey: data.apiKey,
+        systemPrompt: data.systemPrompt,
+        respondToAllMessages: data.respondToAllMessages,
+        rules: data.rules,
+        contextFiles: currentOptions.gemini?.contextFiles || [],
+      };
+
+      await this.prisma.licenseKey.update({
+        where: { id: licenseKeyId },
+        data: { options: currentOptions },
+      });
+
+      return currentOptions.gemini;
+    }
+
+    // Otherwise persist at workspace level
     const settings = await this.prisma.geminiSettings.upsert({
       where: { workspaceId },
       update: {

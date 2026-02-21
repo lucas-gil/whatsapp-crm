@@ -13,10 +13,11 @@ export default function GeminiConfigModal({ open, onClose }: { open: boolean; on
     try {
       const res = await fetch('/api/settings/gemini');
       if (!res.ok) return;
-      const data = await res.json();
-      setApiKey(data.apiKey || '');
-      setSystemPrompt(data.systemPrompt || '');
-      setRespondAll(!!data.respondToAllMessages);
+      const json = await res.json();
+      const data = json?.data ?? json;
+      setApiKey(data?.apiKey || '');
+      setSystemPrompt(data?.systemPrompt || '');
+      setRespondAll(!!data?.respondToAllMessages);
     } catch (err) {
       console.error(err);
     }
