@@ -750,3 +750,115 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// ========== BILLING / CHARGES ==========
+enum ChargeStatus {
+  PENDING
+  A_VENCER
+  VENCIDO
+  NEGOTIATION
+  PAID
+  CANCELLED
+}
+
+model BillingClient {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  leadId          String?     // optional link to existing Lead
+  lead            Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  name            String
+  phoneNumber     String
+  email           String?
+  tags            String[]    @default([])
+  isActive        Boolean     @default(true)
+  optOut          Boolean     @default(false)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  charges         Charge[]
+
+  @@unique([workspaceId, phoneNumber])
+  @@index([workspaceId])
+}
+
+model Charge {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  clientId        String
+  client          BillingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  description     String?
+  amount          Float
+  currency        String      @default("BRL")
+  dueDate         DateTime
+  issuedAt        DateTime    @default(now())
+  paidAt          DateTime?
+  status          ChargeStatus @default(PENDING)
+  daysLate        Int         @default(0)
+  recovered       Boolean     @default(false)
+  recoveredAt     DateTime?
+
+  metadata        Json?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  messageLogs     MessageLog[]
+
+  @@index([workspaceId])
+  @@index([clientId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model MessageLog {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  chargeId        String?
+  charge          Charge?     @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  messageId       String?     // link to Message if created
+  message         Message?    @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  toPhone         String
+  direction       String      @default("OUTGOING")
+  channel         String      @default("whatsapp")
+  templateName    String?
+  tone            String?     // amicavel|lembrete|firme|ultima
+  content         String
+  sentAt          DateTime    @default(now())
+  status          String      @default("SENT")
+
+  createdAt       DateTime    @default(now())
+
+  @@index([workspaceId])
+  @@index([chargeId])
+  @@index([messageId])
+  @@index([toPhone])
+}
+
+model BillingTemplate {
+  id              String      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name            String
+  tone            String      // amigavel|objetivo|firme|ultima
+  content         String      @db.Text
+  variables       String[]    @default([])
+  isActive        Boolean     @default(true)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}

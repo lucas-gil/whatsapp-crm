@@ -9,6 +9,7 @@ import { CrmModule } from './crm/crm.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { QueueModule } from './queue/queue.module';
 import { AdminModule } from './admin/admin.module';
+import { BillingModule } from './billing/billing.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { BroadcastModule } from './broadcast/broadcast.module';
 import { PollsModule } from './polls/polls.module';
@@ -30,6 +31,7 @@ import { AppService } from './app.service';
     GeminiModule,
     QueueModule,
     AdminModule,
+    BillingModule,
     WorkspaceModule,
     BroadcastModule,
     PollsModule,
