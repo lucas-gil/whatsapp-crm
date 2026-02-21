@@ -17,8 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className="antialiased">
-        <AuthGate />
-        {children}
+        <AuthGate>{children}</AuthGate>
         <Toaster position="top-right" />
       </body>
     </html>
