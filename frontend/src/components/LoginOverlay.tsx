@@ -32,6 +32,24 @@ export default function LoginOverlay(props: Props) {
     setLoading(true);
     try {
       const data: any = await onLogin(String(key).trim());
+      // Verificar com o backend se o token realmente tem isAdmin
+      try {
+        const meRes = await fetchWithAuth('/api/auth/me');
+        if (meRes.ok) {
+          const meJson = await meRes.json();
+          if (!meJson?.isAdmin) {
+            setLocalError('Backend não reconheceu usuário como admin');
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        // se falhar, mostramos mensagem e interrompemos
+        setLocalError('Falha ao verificar permissões no backend');
+        setLoading(false);
+        return;
+      }
+
       if (data?.isAdmin) {
         setIsAdminMode(true);
         return;
