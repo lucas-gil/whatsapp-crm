@@ -22,6 +22,13 @@ export const validate = (config: Record<string, any>) => {
           const rest = match[2];
           // Insert empty username and the password: :password@host:port
           value.REDIS_URL = `${scheme}:${redisPassword}@${rest}`;
+          // Also update process.env so libraries that read process.env.REDIS_URL
+          // (instead of using ConfigService) receive the URL with credentials.
+          try {
+            process.env.REDIS_URL = value.REDIS_URL;
+          } catch (e) {
+            // ignore if process.env is not writable in some environments
+          }
         }
       }
     }
