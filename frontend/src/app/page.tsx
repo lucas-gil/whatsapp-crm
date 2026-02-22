@@ -7,8 +7,8 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redireciona direto para dashboard (sem login)
-    router.push('/dashboard');
+    // Redireciona direto para dashboard e força abertura do modal de login
+    router.push('/dashboard?forceLogin=1');
   }, [router]);
 
   return (
