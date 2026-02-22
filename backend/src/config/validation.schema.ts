@@ -18,6 +18,7 @@ export const validationSchema = Joi.object({
   
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().default('redis://localhost:6379'),
+  REDIS_PASSWORD: Joi.string().optional(),
   
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRY: Joi.string().default('24h'),

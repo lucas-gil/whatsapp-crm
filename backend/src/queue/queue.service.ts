@@ -17,20 +17,25 @@ export class QueueService {
   private queues: Map<string, Queue> = new Map();
   private workers: Map<string, Worker> = new Map();
   private redisUrl: string;
+  private redisPassword?: string;
 
   constructor(private configService: ConfigService) {
     this.redisUrl = this.configService.get('REDIS_URL', 'redis://localhost:6379');
+    this.redisPassword = this.configService.get<string | undefined>('REDIS_PASSWORD');
   }
 
   registerQueue(config: QueueConfig) {
     // Criar fila
+    const connectionOptions: any = { url: this.redisUrl };
+    if (this.redisPassword) connectionOptions.password = this.redisPassword;
+
     const queue = new Queue(config.name, {
-      connection: { url: this.redisUrl },
+      connection: connectionOptions,
     });
 
     // Criar worker
     const worker = new Worker(config.name, config.handler, {
-      connection: { url: this.redisUrl },
+      connection: connectionOptions,
       concurrency: 5,
     });
 
