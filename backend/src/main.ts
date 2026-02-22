@@ -1,4 +1,16 @@
 import 'reflect-metadata';
+// Ensure REDIS_URL includes password early, before modules import Redis clients.
+// Some libraries read process.env.REDIS_URL at import time, so we must inject
+// REDIS_PASSWORD into the URL here to avoid NOAUTH errors during bootstrap.
+const _redisUrl = process.env.REDIS_URL;
+const _redisPassword = process.env.REDIS_PASSWORD;
+if (_redisUrl && _redisPassword && !/@/.test(_redisUrl)) {
+  const m = _redisUrl.match(/^(redis(?:s)?:\/\/)(.*)$/i);
+  if (m) {
+    process.env.REDIS_URL = `${m[1]}:${_redisPassword}@${m[2]}`;
+  }
+}
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
