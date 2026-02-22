@@ -2,8 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 import dynamic from 'next/dynamic';
 import { Toaster } from 'react-hot-toast';
-const AuthGate = dynamic(() => import('@/components/AuthGate'), { ssr: false });
-const AuthProvider = dynamic(() => import('@/hooks/useAuth').then((mod) => mod.AuthProvider), { ssr: false });
+const AuthShell = dynamic(() => import('@/components/AuthShell'), { ssr: false });
 
 export const metadata: Metadata = {
   title: 'WhatsApp CRM',
@@ -17,9 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className="antialiased">
-        <AuthProvider>
-          <AuthGate>{children}</AuthGate>
-        </AuthProvider>
+        <AuthShell>{children}</AuthShell>
         <Toaster position="top-right" />
       </body>
     </html>

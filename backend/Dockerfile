@@ -10,6 +10,9 @@ RUN npm install --legacy-peer-deps
 
 COPY . .
 
+# generate Prisma client types before building
+RUN npx prisma generate || true
+
 RUN npm run build
 
 RUN addgroup -g 1001 -S nodejs && \
