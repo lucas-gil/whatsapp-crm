@@ -30,8 +30,7 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: sh -c 'if [ -n "${REDIS_PASSWORD}" ]; then exec redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"; else exec redis-server --appendonly yes; fi'
-    ports:
-      - "6379:6379"
+    # Removed public binding to avoid unauthenticated access from the host
     volumes:
       - redis_data:/data
     healthcheck:
@@ -73,12 +72,12 @@ services:
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
       JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
       PORT: 3000
-      CORS_ORIGIN: "http://localhost:3001"
+      CORS_ORIGIN: "http://localhost:3002"
       WHATSAPP_PROVIDER: "web-qr"
       STORAGE_PROVIDER: "local"
       STORAGE_PATH: "./storage"
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,7 +100,7 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:3000"
       NODE_ENV: production
     ports:
-      - "3001:3000"
+      - "3002:3000"
     depends_on:
       - backend
     networks:
