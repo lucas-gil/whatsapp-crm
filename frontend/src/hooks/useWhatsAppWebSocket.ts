@@ -27,7 +27,8 @@ export function useWhatsAppWebSocket(token: string | null) {
     if (!token) return;
 
     try {
-      const socketIo = io('http://localhost/whatsapp', {
+      const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/g, '') || window.location.origin;
+      const socketIo = io(`${base.replace(/\/+$/g, '')}/whatsapp`, {
         path: '/socket.io',
         query: {
           token,
