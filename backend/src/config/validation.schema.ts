@@ -7,6 +7,28 @@ export const validate = (config: Record<string, any>) => {
   if (error) {
     throw new Error(`Config validation error: ${error.message}`);
   }
+  // If REDIS_PASSWORD is provided but REDIS_URL doesn't include credentials,
+  // inject the password into the URL so libraries that read REDIS_URL directly
+  // will authenticate correctly (avoids NOAUTH errors).
+  try {
+    const redisUrl: string | undefined = value.REDIS_URL;
+    const redisPassword: string | undefined = value.REDIS_PASSWORD;
+    if (redisUrl && redisPassword) {
+      // Only modify if URL does not already contain an @ (credentials)
+      if (!/@/.test(redisUrl)) {
+        const match = redisUrl.match(/^(redis(?:s)?:\/\/)(.*)$/i);
+        if (match) {
+          const scheme = match[1];
+          const rest = match[2];
+          // Insert empty username and the password: :password@host:port
+          value.REDIS_URL = `${scheme}:${redisPassword}@${rest}`;
+        }
+      }
+    }
+  } catch (e) {
+    // Non-fatal: if parsing fails, return original value and let services handle auth via REDIS_PASSWORD
+  }
+
   return value;
 };
 
