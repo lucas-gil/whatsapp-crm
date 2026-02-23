@@ -12,7 +12,7 @@ export default function BillingChargesPage() {
         const charges = data.charges || [];
         setCharges(charges);
         // Soma apenas valores em aberto
-        const sum = charges.filter(c => c.status !== 'PAID').reduce((acc, c) => acc + Number(c.amount || 0), 0);
+        const sum = charges.filter((c: { status: string; amount: number }) => c.status !== 'PAID').reduce((acc: number, c: { amount: number }) => acc + Number(c.amount || 0), 0);
         setTotalOpen(sum);
       });
   }, []);

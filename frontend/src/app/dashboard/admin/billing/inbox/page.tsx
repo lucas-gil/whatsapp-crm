@@ -32,7 +32,7 @@ export default function BillingInboxPage() {
             <h2 className="font-semibold mb-2">Mensagens</h2>
             {selectedClient ? (
               <ul>
-                {conversations.find(c => c.client?.id === selectedClient)?.messages?.map((msg, idx) => (
+                {conversations.find((c: any) => c.client?.id === selectedClient)?.messages?.map((msg: any, idx: number) => (
                   <li key={idx} className="mb-2">
                     <span className="block text-xs text-gray-400">{msg.date ? new Date(msg.date).toLocaleString() : '-'}</span>
                     <span className="block text-sm">{msg.text}</span>

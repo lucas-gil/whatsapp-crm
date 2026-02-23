@@ -97,7 +97,7 @@ export default function BillingAdminPage() {
       setFaixas(faixasData);
 
       // Recuperado
-      const recuperadoValor = charges.filter((c: any) => c.status === 'PAID').reduce((acc, c) => acc + Number(c.amount || 0), 0);
+      const recuperadoValor = charges.filter((c: { status: string; amount: number }) => c.status === 'PAID').reduce((acc: number, c: { amount: number }) => acc + Number(c.amount || 0), 0);
       setRecuperado(recuperadoValor);
 
       // Taxa de pagamento
