@@ -1,8 +1,66 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function BillingAdminPage() {
+  const { fetchWithAuth, loading: authLoading, token } = useAuth();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+  const api = apiBase ? apiBase.replace(/\/$/, '') : typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:3000';
+
+  const [totalDueToday, setTotalDueToday] = useState<number | null>(null);
+  const [totalOpen, setTotalOpen] = useState<number | null>(null);
+  const [totalOverdue, setTotalOverdue] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (authLoading || !token) return;
+    loadTotals();
+  }, [authLoading, token]);
+
+  const loadTotals = async () => {
+    try {
+      // buscar informações do usuário para workspaceId
+      const meRes = await fetchWithAuth(`${api}/auth/me`);
+      if (!meRes.ok) return;
+      const me = await meRes.json();
+      const workspaceId = me?.workspaceId;
+
+      const res = await fetchWithAuth(`${api}/billing/charges?workspaceId=${workspaceId}&limit=1000`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const charges = data?.charges || data || [];
+
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+
+      let dueToday = 0;
+      let open = 0;
+      let overdue = 0;
+
+      charges.forEach((c: any) => {
+        const due = c.dueDate ? String(c.dueDate).slice(0, 10) : null;
+        const amount = Number(c.amount || 0);
+        const status = c.status || '';
+        if (status !== 'PAID') {
+          open += amount;
+        }
+        if (due && due === todayStr && status !== 'PAID') {
+          dueToday += amount;
+        }
+        if (due && due < todayStr && status !== 'PAID') {
+          overdue += amount;
+        }
+      });
+
+      setTotalDueToday(dueToday);
+      setTotalOpen(open);
+      setTotalOverdue(overdue);
+    } catch (err) {
+      console.error('Erro ao carregar totais de cobrança', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -12,15 +70,15 @@ export default function BillingAdminPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm text-gray-500">Total em aberto</p>
-            <p className="text-2xl font-bold text-red-600">R$ -</p>
+            <p className="text-2xl font-bold text-red-600">{totalOpen !== null ? `R$ ${totalOpen.toFixed(2)}` : 'R$ -'}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm text-gray-500">Total vencido</p>
-            <p className="text-2xl font-bold text-orange-600">R$ -</p>
+            <p className="text-2xl font-bold text-orange-600">{totalOverdue !== null ? `R$ ${totalOverdue.toFixed(2)}` : 'R$ -'}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-sm text-gray-500">Total a vencer hoje</p>
-            <p className="text-2xl font-bold text-green-600">R$ -</p>
+            <p className="text-2xl font-bold text-green-600">{totalDueToday !== null ? `R$ ${totalDueToday.toFixed(2)}` : 'R$ -'}</p>
           </div>
         </div>
 

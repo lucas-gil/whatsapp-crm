@@ -1,8 +1,11 @@
-FROM node:20-alpine
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
-RUN apk add --no-cache dumb-init
+# Install dumb-init and OpenSSL runtime required by Prisma engines
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends dumb-init openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 
@@ -10,7 +13,7 @@ RUN npm install --legacy-peer-deps
 
 COPY . .
 
-# generate Prisma client types before building
+# generate Prisma client types before building (will produce linux-x64 binaries on Debian)
 RUN npx prisma generate || true
 
 RUN npm run build

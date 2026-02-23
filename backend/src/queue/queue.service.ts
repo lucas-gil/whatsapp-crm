@@ -26,8 +26,9 @@ export class QueueService {
 
   registerQueue(config: QueueConfig) {
     // Criar fila
+    // BullMQ/redis clients usually read credentials from the URL (recommended).
+    // We ensure `REDIS_URL` contains credentials earlier (see validation/main bootstrap).
     const connectionOptions: any = { url: this.redisUrl };
-    if (this.redisPassword) connectionOptions.password = this.redisPassword;
 
     const queue = new Queue(config.name, {
       connection: connectionOptions,

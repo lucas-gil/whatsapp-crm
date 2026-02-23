@@ -134,7 +134,12 @@ health() {
     
     echo ""
     echo -e "${BLUE}Redis:${NC}"
-    $DOCKER_COMPOSE -f $DOCKER_COMPOSE_FILE exec -T cache redis-cli ping 2>/dev/null && log_info "Redis está rodando ✓" || log_error "Redis não respondendo ✗"
+    # Use authentication if REDIS_PASSWORD is provided
+    if [ -n "${REDIS_PASSWORD}" ]; then
+        $DOCKER_COMPOSE -f $DOCKER_COMPOSE_FILE exec -T cache redis-cli -a "${REDIS_PASSWORD}" ping 2>/dev/null && log_info "Redis está rodando ✓" || log_error "Redis não respondendo ✗"
+    else
+        $DOCKER_COMPOSE -f $DOCKER_COMPOSE_FILE exec -T cache redis-cli ping 2>/dev/null && log_info "Redis está rodando ✓" || log_error "Redis não respondendo ✗"
+    fi
 }
 
 # Mostrar uso
