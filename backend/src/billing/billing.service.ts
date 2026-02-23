@@ -40,7 +40,19 @@ export class BillingService {
   async createCharge(workspaceId: string, clientId: string, dto: any) {
     const client = await this.prisma.billingClient.findUnique({ where: { id: clientId } });
     if (!client || client.workspaceId !== workspaceId) throw new NotFoundException('Cliente não encontrado');
-    const charge = await this.prisma.charge.create({ data: { ...dto, clientId, workspaceId } });
+    // Validação dos campos obrigatórios
+    if (!dto.amount || !dto.dueDate) {
+      throw new BadRequestException('Valor e data de vencimento são obrigatórios');
+    }
+    // currency opcional, default BRL
+    const charge = await this.prisma.charge.create({
+      data: {
+        ...dto,
+        clientId,
+        workspaceId,
+        currency: dto.currency || 'BRL'
+      }
+    });
     return charge;
   }
 
