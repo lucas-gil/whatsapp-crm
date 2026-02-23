@@ -67,9 +67,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: "postgresql://whatsapp_user:whatsapp_password@postgres:5432/whatsapp_crm"
-      REDIS_URL: "redis://redis:6379"
-      # If your Redis requires a password, set REDIS_PASSWORD in your environment or .env file
+      # Construct REDIS_URL from REDIS_PASSWORD when provided to ensure containers use auth.
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
       JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production-min-32-chars"
       PORT: 3000
       CORS_ORIGIN: "http://localhost:3002"

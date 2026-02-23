@@ -14,14 +14,14 @@ export const validate = (config: Record<string, any>) => {
     const redisUrl: string | undefined = value.REDIS_URL;
     const redisPassword: string | undefined = value.REDIS_PASSWORD;
     if (redisUrl && redisPassword) {
-      // Only modify if URL does not already contain an @ (credentials)
+      // Only modify if URL does not already contain credentials (@)
       if (!/@/.test(redisUrl)) {
         const match = redisUrl.match(/^(redis(?:s)?:\/\/)(.*)$/i);
         if (match) {
-          const scheme = match[1];
-          const rest = match[2];
-          // Insert empty username and the password: :password@host:port
-          value.REDIS_URL = `${scheme}:${redisPassword}@${rest}`;
+          const scheme = match[1]; // e.g. 'redis://'
+          const rest = match[2]; // e.g. 'redis:6379'
+          // Build redis URL with empty username and password: 'redis://:password@host:port'
+          value.REDIS_URL = `${scheme}${':' + redisPassword + '@' + rest}`;
           // Also update process.env so libraries that read process.env.REDIS_URL
           // (instead of using ConfigService) receive the URL with credentials.
           try {

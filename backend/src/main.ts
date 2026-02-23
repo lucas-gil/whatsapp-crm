@@ -7,7 +7,8 @@ const _redisPassword = process.env.REDIS_PASSWORD;
 if (_redisUrl && _redisPassword && !/@/.test(_redisUrl)) {
   const m = _redisUrl.match(/^(redis(?:s)?:\/\/)(.*)$/i);
   if (m) {
-    process.env.REDIS_URL = `${m[1]}:${_redisPassword}@${m[2]}`;
+    // build redis://:password@host:port
+    process.env.REDIS_URL = `${m[1]}${':' + _redisPassword + '@' + m[2]}`;
   }
 }
 
