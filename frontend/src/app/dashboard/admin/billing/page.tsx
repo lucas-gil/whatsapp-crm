@@ -12,10 +12,14 @@ export default function BillingAdminPage() {
   const [totalDueToday, setTotalDueToday] = useState<number | null>(null);
   const [totalOpen, setTotalOpen] = useState<number | null>(null);
   const [totalOverdue, setTotalOverdue] = useState<number | null>(null);
+  const [faixas, setFaixas] = useState<any[]>([]);
+  const [recuperado, setRecuperado] = useState<number | null>(null);
+  const [taxaPagamento, setTaxaPagamento] = useState<number | null>(null);
 
   useEffect(() => {
     if (authLoading || !token) return;
     loadTotals();
+    loadRelatorios();
   }, [authLoading, token]);
 
   const loadTotals = async () => {
@@ -58,6 +62,52 @@ export default function BillingAdminPage() {
       setTotalOverdue(overdue);
     } catch (err) {
       console.error('Erro ao carregar totais de cobrança', err);
+    }
+  };
+
+  const loadRelatorios = async () => {
+    try {
+      const meRes = await fetchWithAuth(`${api}/auth/me`);
+      if (!meRes.ok) return;
+      const me = await meRes.json();
+      const workspaceId = me?.workspaceId;
+      const res = await fetchWithAuth(`${api}/billing/charges?workspaceId=${workspaceId}&limit=1000`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const charges = data?.charges || data || [];
+
+      // Faixas de atraso
+      const faixasData = [
+        { label: 'Até 7 dias', value: 0 },
+        { label: '8-30 dias', value: 0 },
+        { label: '31-90 dias', value: 0 },
+        { label: 'Acima de 90 dias', value: 0 }
+      ];
+      const now = new Date();
+      charges.forEach((c: any) => {
+        if (c.status !== 'PAID' && c.dueDate) {
+          const venc = new Date(c.dueDate);
+          const diff = Math.floor((now.getTime() - venc.getTime()) / (1000*60*60*24));
+          if (diff > 0 && diff <= 7) faixasData[0].value += Number(c.amount || 0);
+          else if (diff > 7 && diff <= 30) faixasData[1].value += Number(c.amount || 0);
+          else if (diff > 30 && diff <= 90) faixasData[2].value += Number(c.amount || 0);
+          else if (diff > 90) faixasData[3].value += Number(c.amount || 0);
+        }
+      });
+      setFaixas(faixasData);
+
+      // Recuperado
+      const recuperadoValor = charges.filter((c: any) => c.status === 'PAID').reduce((acc, c) => acc + Number(c.amount || 0), 0);
+      setRecuperado(recuperadoValor);
+
+      // Taxa de pagamento
+      const total = charges.length;
+      const pagos = charges.filter((c: any) => c.status === 'PAID').length;
+      setTaxaPagamento(total > 0 ? (pagos/total)*100 : null);
+    } catch (err) {
+      setFaixas([]);
+      setRecuperado(null);
+      setTaxaPagamento(null);
     }
   };
 
@@ -106,15 +156,19 @@ export default function BillingAdminPage() {
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-gray-500">Atrasados por faixa</p>
-              <p className="font-semibold">-</p>
+              <ul className="text-xs mt-2">
+                {faixas.map((f, idx) => (
+                  <li key={idx}>{f.label}: <span className="font-semibold text-red-600">R$ {f.value.toFixed(2)}</span></li>
+                ))}
+              </ul>
             </div>
             <div>
               <p className="text-sm text-gray-500">Recuperado</p>
-              <p className="font-semibold">-</p>
+              <p className="font-semibold text-green-600 text-xl">{recuperado !== null ? `R$ ${recuperado.toFixed(2)}` : '-'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Taxa de pagamento</p>
-              <p className="font-semibold">-</p>
+              <p className="font-semibold text-blue-600 text-xl">{taxaPagamento !== null ? `${taxaPagamento.toFixed(1)}%` : '-'}</p>
             </div>
           </div>
         </div>
