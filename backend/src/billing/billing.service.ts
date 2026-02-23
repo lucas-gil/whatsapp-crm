@@ -7,6 +7,20 @@ export class BillingService {
   constructor(private prisma: PrismaService, private whatsapp: WhatsAppService) {}
 
   async createClient(workspaceId: string, data: any) {
+    // Validação básica
+    if (!data.name || !data.phoneNumber) {
+      throw new BadRequestException('Nome e telefone são obrigatórios');
+    }
+    // Verifica duplicidade
+    const exists = await this.prisma.billingClient.findFirst({
+      where: {
+        workspaceId,
+        phoneNumber: data.phoneNumber
+      }
+    });
+    if (exists) {
+      throw new BadRequestException('Cliente já cadastrado com esse telefone');
+    }
     const client = await this.prisma.billingClient.create({ data: { ...data, workspaceId } });
     return client;
   }
