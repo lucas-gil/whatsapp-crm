@@ -6,9 +6,10 @@ export class BillingController {
   constructor(private service: BillingService) {}
 
   @Post('clients')
-  async createClient(@Body() body: any) {
-    // expects workspaceId in body for now
-    return this.service.createClient(body.workspaceId, body);
+  async createClient(@Request() req: any, @Body() body: any) {
+    // Usa sempre o workspaceId do usuário autenticado
+    const workspaceId = req.user.workspaceId;
+    return this.service.createClient(workspaceId, body);
   }
 
   @Get('clients')
