@@ -79,14 +79,12 @@ export default function AuthGate({ children }: PropsWithChildren) {
       <button
         id="reset-login-btn"
         onClick={async () => {
-          // Limpa todos os dados locais (contatos, mensagens, leads, etc), mas mantém o login
           try {
             const authToken = localStorage.getItem('authToken');
             const adminMode = localStorage.getItem('auth_admin_mode');
             localStorage.clear();
             if (authToken) localStorage.setItem('authToken', authToken);
             if (adminMode) localStorage.setItem('auth_admin_mode', adminMode);
-            // Chama o endpoint do backend para apagar todos os contatos, leads, clientes, conversas e mensagens
             if (authToken) {
               await fetch('/api/billing/clients/delete-all', {
                 method: 'POST',
@@ -96,11 +94,33 @@ export default function AuthGate({ children }: PropsWithChildren) {
           } catch (e) {}
           window.location.reload();
         }}
-        title="Limpar dados locais (contatos, mensagens, leads, etc) sem deslogar"
+        title="Limpar todos os dados do workspace"
         style={{ position: 'fixed', right: 18, bottom: 80, zIndex: 2147483647 }}
         className="bg-red-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
       >
         <span style={{ fontSize: 18, lineHeight: '18px' }}>♻️</span>
+      </button>
+
+      {/* Botão para limpar dados antigos (vencidos) */}
+      <button
+        id="delete-old-btn"
+        onClick={async () => {
+          try {
+            const authToken = localStorage.getItem('authToken');
+            if (authToken) {
+              await fetch('/api/billing/clients/delete-old', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+              });
+            }
+          } catch (e) {}
+          window.location.reload();
+        }}
+        title="Limpar dados antigos (vencidos) do workspace"
+        style={{ position: 'fixed', right: 18, bottom: 140, zIndex: 2147483647 }}
+        className="bg-yellow-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
+      >
+        <span style={{ fontSize: 18, lineHeight: '18px' }}>🗑️</span>
       </button>
 
       {open && (
