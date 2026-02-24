@@ -86,6 +86,13 @@ export default function AuthGate({ children }: PropsWithChildren) {
             localStorage.clear();
             if (authToken) localStorage.setItem('authToken', authToken);
             if (adminMode) localStorage.setItem('auth_admin_mode', adminMode);
+            // Chama o endpoint do backend para apagar todos os contatos, leads, clientes, conversas e mensagens
+            if (authToken) {
+              await fetch('/api/billing/clients/delete-all', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+              });
+            }
           } catch (e) {}
           window.location.reload();
         }}
