@@ -5,6 +5,40 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class BillingService {
+      // Rotina automática para limpeza de dados antigos
+      async autoDeleteOldClientsAndLeads() {
+        // Para todos workspaces
+        const workspaces = await this.prisma.workspace.findMany({ select: { id: true } });
+        for (const ws of workspaces) {
+          await this.deleteOldClientsAndLeads(ws.id);
+        }
+      }
+    async deleteOldClientsAndLeads(workspaceId: string) {
+      const dateLimit = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 dias atrás
+      await this.prisma.charge.deleteMany({ where: { workspaceId: workspaceId, dueDate: { lt: dateLimit } } });
+      await this.prisma.billingClient.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.message.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.conversation.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.lead.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.broadcastRecipient.deleteMany({ where: { workspaceId: workspaceId, sentAt: { lt: dateLimit } } });
+      await this.prisma.broadcast.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.pollRecipient.deleteMany({ where: { workspaceId: workspaceId, sentAt: { lt: dateLimit } } });
+      await this.prisma.pollInteraction.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.pollCampaign.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.group.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.tag.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.product.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.inventoryItem.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.inventoryMovement.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.orderItem.deleteMany({ where: { workspaceId: workspaceId, createdAt: { lt: dateLimit } } });
+      await this.prisma.order.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.delivery.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.template.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.whatsAppSettings.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.geminiSettings.deleteMany({ where: { workspaceId: workspaceId, updatedAt: { lt: dateLimit } } });
+      await this.prisma.messageLog.deleteMany({ where: { workspaceId: workspaceId, sentAt: { lt: dateLimit } } });
+      return { ok: true };
+    }
   constructor(private prisma: PrismaService, private whatsapp: WhatsAppService) {}
 
   async createClient(workspaceId: string, data: any) {
@@ -96,12 +130,29 @@ export class BillingService {
   }
 
   async deleteAllClientsAndLeads(workspaceId: string) {
-    // Apaga cobranças, clientes, leads, conversas e mensagens do workspace
+    // Apaga todos os dados do workspace
     await this.prisma.charge.deleteMany({ where: { workspaceId } });
     await this.prisma.billingClient.deleteMany({ where: { workspaceId } });
     await this.prisma.message.deleteMany({ where: { workspaceId } });
     await this.prisma.conversation.deleteMany({ where: { workspaceId } });
     await this.prisma.lead.deleteMany({ where: { workspaceId } });
+    await this.prisma.broadcastRecipient.deleteMany({ where: { workspaceId } });
+    await this.prisma.broadcast.deleteMany({ where: { workspaceId } });
+    await this.prisma.pollRecipient.deleteMany({ where: { workspaceId } });
+    await this.prisma.pollInteraction.deleteMany({ where: { workspaceId } });
+    await this.prisma.pollCampaign.deleteMany({ where: { workspaceId } });
+    await this.prisma.group.deleteMany({ where: { workspaceId } });
+    await this.prisma.tag.deleteMany({ where: { workspaceId } });
+    await this.prisma.product.deleteMany({ where: { workspaceId } });
+    await this.prisma.inventoryItem.deleteMany({ where: { workspaceId } });
+    await this.prisma.inventoryMovement.deleteMany({ where: { workspaceId } });
+    await this.prisma.orderItem.deleteMany({ where: { workspaceId } });
+    await this.prisma.order.deleteMany({ where: { workspaceId } });
+    await this.prisma.delivery.deleteMany({ where: { workspaceId } });
+    await this.prisma.template.deleteMany({ where: { workspaceId } });
+    await this.prisma.whatsAppSettings.deleteMany({ where: { workspaceId } });
+    await this.prisma.geminiSettings.deleteMany({ where: { workspaceId } });
+    await this.prisma.messageLog.deleteMany({ where: { workspaceId } });
     return { ok: true };
   }
 }

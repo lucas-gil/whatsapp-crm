@@ -82,6 +82,7 @@ const emojiList = [
 
 export default function LeadsPage() {
   const { token } = useAuth();
+  const { status: waStatus } = require('@/hooks/useWhatsAppConnection').useWhatsAppConnection(token);
   const { socket, connected, onEvent } = useWhatsAppWebSocket(token);
   const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
   const api = apiBase
@@ -132,8 +133,15 @@ export default function LeadsPage() {
 
   useEffect(() => {
     if (!token) return;
+    if (!waStatus.connected) {
+      setLeads([]);
+      setGroups([]);
+      setConversations([]);
+      setError('Conecte o WhatsApp para visualizar os dados reais.');
+      return;
+    }
     loadData();
-  }, [token]);
+  }, [token, waStatus.connected]);
 
   // Listen to socket events to keep UI in sync when messages are sent/updated
   useEffect(() => {
@@ -220,11 +228,8 @@ export default function LeadsPage() {
   };
 
   const fetchLeads = async (headers: Record<string, string>) => {
-    const [contactsResponse, leadsResponse] = await Promise.all([
-      fetch(`${api}/whatsapp/contacts`, { headers }),
-      fetch(`${api}/crm/leads`, { headers }),
-    ]);
-
+    // Só sincroniza contatos reais do WhatsApp
+    const contactsResponse = await fetch(`${api}/whatsapp/contacts`, { headers });
     let contactsList: any[] = [];
     if (contactsResponse.ok) {
       const contactsData = await contactsResponse.json();
@@ -233,6 +238,8 @@ export default function LeadsPage() {
       setError('Erro ao carregar contatos do WhatsApp');
     }
 
+    // Busca leads do CRM para merge
+    const leadsResponse = await fetch(`${api}/crm/leads`, { headers });
     const leadsData = leadsResponse.ok ? await leadsResponse.json() : [];
     if (!leadsResponse.ok) {
       setError('Erro ao carregar leads do CRM');
@@ -245,6 +252,7 @@ export default function LeadsPage() {
       }
     });
 
+    // Exibe apenas contatos reais do WhatsApp, mesclando com dados do CRM
     const merged: Lead[] = contactsList.map((contact: any) => {
       const leadMatch = contact.phoneNumber ? leadsByPhone.get(contact.phoneNumber) : undefined;
       const fallbackName = contact.phoneNumber || contact.name || 'Contato';
@@ -267,6 +275,7 @@ export default function LeadsPage() {
       };
     });
 
+    // Adiciona leads do CRM que não estão nos contatos reais
     leadsList.forEach((lead: Lead) => {
       if (!lead.phoneNumber) return;
       if (!merged.some((item) => item.phoneNumber === lead.phoneNumber)) {

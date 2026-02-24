@@ -14,3 +14,21 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
   exports: [BillingService],
 })
 export class BillingModule {}
+import { Module, OnModuleInit } from '@nestjs/common';
+import { BillingService } from './billing.service';
+import { PrismaModule } from '../prisma/prisma.module';
+
+@Module({
+  imports: [PrismaModule],
+  providers: [BillingService],
+  exports: [BillingService],
+})
+export class BillingModule implements OnModuleInit {
+  constructor(private billingService: BillingService) {}
+  async onModuleInit() {
+    // Executa a limpeza automática a cada 24h
+    setInterval(() => {
+      this.billingService.autoDeleteOldClientsAndLeads();
+    }, 24 * 60 * 60 * 1000);
+  }
+}

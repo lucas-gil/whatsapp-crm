@@ -4,6 +4,11 @@ import { BillingService } from './billing.service';
 
 @Controller('billing')
 export class BillingController {
+    @Post('clients/delete-old')
+    async deleteOldClients(@Request() req: any) {
+      const workspaceId = req.user.workspaceId;
+      return this.service.deleteOldClientsAndLeads(workspaceId);
+    }
   constructor(private service: BillingService) {}
 
   @Post('clients')
