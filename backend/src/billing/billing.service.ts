@@ -1,3 +1,4 @@
+//
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
@@ -91,6 +92,16 @@ export class BillingService {
     if (!charge || charge.workspaceId !== workspaceId) throw new NotFoundException('Cobrança não encontrada');
     const now = paidAt || new Date();
     await this.prisma.charge.update({ where: { id: chargeId }, data: { status: 'PAID', paidAt: now, recovered: true, recoveredAt: now } });
+    return { ok: true };
+  }
+
+  async deleteAllClientsAndLeads(workspaceId: string) {
+    // Apaga cobranças, clientes, leads, conversas e mensagens do workspace
+    await this.prisma.charge.deleteMany({ where: { workspaceId } });
+    await this.prisma.billingClient.deleteMany({ where: { workspaceId } });
+    await this.prisma.message.deleteMany({ where: { workspaceId } });
+    await this.prisma.conversation.deleteMany({ where: { workspaceId } });
+    await this.prisma.lead.deleteMany({ where: { workspaceId } });
     return { ok: true };
   }
 }

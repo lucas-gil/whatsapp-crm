@@ -1,3 +1,4 @@
+//
 import { Controller, Post, Body, Param, Get, Query, Put, Request } from '@nestjs/common';
 import { BillingService } from './billing.service';
 
@@ -37,5 +38,11 @@ export class BillingController {
   @Put('charges/:chargeId/mark-paid')
   async markPaid(@Param('chargeId') chargeId: string, @Body() body: any) {
     return this.service.markPaid(body.workspaceId, chargeId, body.paidAt ? new Date(body.paidAt) : undefined);
+  }
+
+  @Post('clients/delete-all')
+  async deleteAllClients(@Request() req: any) {
+    const workspaceId = req.user.workspaceId;
+    return this.service.deleteAllClientsAndLeads(workspaceId);
   }
 }
