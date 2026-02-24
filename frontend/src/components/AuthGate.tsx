@@ -21,11 +21,17 @@ export default function AuthGate({ children }: PropsWithChildren) {
     try {
       const params = new URLSearchParams(window.location.search);
       if (params.get('forceLogin') === '1') {
-        setOpen(true);
-        params.delete('forceLogin');
-        const newSearch = params.toString();
-        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-        window.history.replaceState({}, document.title, newUrl);
+        // Force a re-login: clear server/client auth and open modal
+        (async () => {
+          try {
+            await logout();
+          } catch (e) {}
+          setOpen(true);
+          params.delete('forceLogin');
+          const newSearch = params.toString();
+          const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+          window.history.replaceState({}, document.title, newUrl);
+        })();
       }
     } catch (e) {
       // ignore
