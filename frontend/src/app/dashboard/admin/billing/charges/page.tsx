@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 export default function BillingChargesPage() {
   const [charges, setCharges] = useState<any[]>([]);
   const [view, setView] = useState<'calendario' | 'lista' | 'kanban'>('lista');
+    const [search, setSearch] = useState("");
   const [totalOpen, setTotalOpen] = useState(0);
 
   useEffect(() => {
@@ -31,6 +32,15 @@ export default function BillingChargesPage() {
           <button className={view==='lista' ? 'font-bold' : ''} onClick={()=>setView('lista')}>Lista</button>
           <button className={view==='kanban' ? 'font-bold' : ''} onClick={()=>setView('kanban')}>Kanban</button>
         </div>
+          <div className="mt-6">
+            <input
+              type="text"
+              className="border p-2 rounded w-full"
+              placeholder="Pesquisar cobranças por cliente, valor, status..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         <div className="mt-6">
           {view === 'lista' && (
             <table className="w-full bg-white rounded shadow">
@@ -43,14 +53,25 @@ export default function BillingChargesPage() {
                 </tr>
               </thead>
               <tbody>
-                {charges.map((c, idx) => (
-                  <tr key={idx}>
-                    <td>{c.client?.name || '-'}</td>
-                    <td>R$ {Number(c.amount).toFixed(2)}</td>
-                    <td>{c.dueDate ? new Date(c.dueDate).toLocaleDateString() : '-'}</td>
-                    <td>{c.status}</td>
-                  </tr>
-                ))}
+                  {charges
+                    .filter(c => {
+                      if (!search) return true;
+                      const s = search.toLowerCase();
+                      return (
+                        (c.client?.name && c.client.name.toLowerCase().includes(s)) ||
+                        (c.amount && String(c.amount).includes(s)) ||
+                        (c.status && c.status.toLowerCase().includes(s)) ||
+                        (c.dueDate && new Date(c.dueDate).toLocaleDateString().includes(s))
+                      );
+                    })
+                    .map((c, idx) => (
+                      <tr key={idx}>
+                        <td>{c.client?.name || '-'}</td>
+                        <td>R$ {Number(c.amount).toFixed(2)}</td>
+                        <td>{c.dueDate ? new Date(c.dueDate).toLocaleDateString() : '-'}</td>
+                        <td>{c.status}</td>
+                      </tr>
+                    ))}
               </tbody>
             </table>
           )}

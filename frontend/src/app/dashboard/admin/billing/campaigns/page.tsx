@@ -6,6 +6,7 @@ export default function BillingCampaignsPage() {
   const [scheduledMessages, setScheduledMessages] = useState<any[]>([]);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editMessage, setEditMessage] = useState<string>('');
+    const [search, setSearch] = useState("");
 
   useEffect(() => {
     // Buscar todas as cobranças e status dos contatos
@@ -41,6 +42,15 @@ export default function BillingCampaignsPage() {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold">Campanhas</h1>
         <p className="text-gray-600 mt-2">Envio programado de mensagens de cobrança para contatos, com múltiplos tipos e datas.</p>
+          <div className="mt-6">
+            <input
+              type="text"
+              className="border p-2 rounded w-full"
+              placeholder="Pesquisar campanhas por cliente, valor, status..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
 
         <div className="bg-white rounded shadow p-6 mt-6">
           <h2 className="font-semibold mb-2">Agendar Mensagem</h2>
@@ -96,14 +106,25 @@ export default function BillingCampaignsPage() {
               </tr>
             </thead>
             <tbody>
-              {charges.map((c, idx) => (
-                <tr key={idx}>
-                  <td>{c.client?.name || '-'}</td>
-                  <td>R$ {Number(c.amount).toFixed(2)}</td>
-                  <td>{c.dueDate ? new Date(c.dueDate).toLocaleDateString() : '-'}</td>
-                  <td>{c.status}</td>
-                </tr>
-              ))}
+                {charges
+                  .filter(c => {
+                    if (!search) return true;
+                    const s = search.toLowerCase();
+                    return (
+                      (c.client?.name && c.client.name.toLowerCase().includes(s)) ||
+                      (c.amount && String(c.amount).includes(s)) ||
+                      (c.status && c.status.toLowerCase().includes(s)) ||
+                      (c.dueDate && new Date(c.dueDate).toLocaleDateString().includes(s))
+                    );
+                  })
+                  .map((c, idx) => (
+                    <tr key={idx}>
+                      <td>{c.client?.name || '-'}</td>
+                      <td>R$ {Number(c.amount).toFixed(2)}</td>
+                      <td>{c.dueDate ? new Date(c.dueDate).toLocaleDateString() : '-'}</td>
+                      <td>{c.status}</td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>

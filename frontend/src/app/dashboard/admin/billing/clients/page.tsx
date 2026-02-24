@@ -12,6 +12,7 @@ export default function BillingClientsPage() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
 
+    const [search, setSearch] = useState("");
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -128,13 +129,33 @@ export default function BillingClientsPage() {
         </div>
 
         {msg && <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded">{msg}</div>}
+        <div className="mt-6">
+          <input
+            type="text"
+            className="border p-2 rounded w-full"
+            placeholder="Pesquisar contatos por nome, número ou info..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
 
         <div className="mt-6 space-y-4">
           {loading && <p>Carregando...</p>}
-
-          {contacts.map((c) => (
-            <ContactRow key={c.phoneNumber || c.jid || c.id} contact={c} onCreate={createClientAndCharge} workspaceId={workspaceId} />
-          ))}
+          {contacts
+            .filter(c => {
+              if (!search) return true;
+              const s = search.toLowerCase();
+              return (
+                (c.name && c.name.toLowerCase().includes(s)) ||
+                (c.pushname && c.pushname.toLowerCase().includes(s)) ||
+                (c.phoneNumber && c.phoneNumber.toString().includes(s)) ||
+                (c.jid && c.jid.toLowerCase().includes(s)) ||
+                (c.email && c.email.toLowerCase().includes(s))
+              );
+            })
+            .map((c) => (
+              <ContactRow key={c.phoneNumber || c.jid || c.id} contact={c} onCreate={createClientAndCharge} workspaceId={workspaceId} />
+            ))}
         </div>
       </div>
     </div>

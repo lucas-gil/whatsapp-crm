@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 export default function BillingInboxPage() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedClient, setSelectedClient] = useState<any>(null);
+    const [search, setSearch] = useState("");
 
   useEffect(() => {
     // Buscar conversas agrupadas por cliente (lead)
@@ -17,16 +18,31 @@ export default function BillingInboxPage() {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold">Caixa de entrada</h1>
         <p className="text-gray-600 mt-2">Veja as respostas dos clientes agrupadas por contato, igual a um email, mas para WhatsApp.</p>
+          <div className="mt-6">
+            <input
+              type="text"
+              className="border p-2 rounded w-full"
+              placeholder="Pesquisar contatos por nome..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           <div className="bg-white rounded shadow p-4">
             <h2 className="font-semibold mb-2">Contatos</h2>
             <ul>
-              {conversations.map((conv, idx) => (
-                <li key={idx} className={selectedClient === conv.client?.id ? 'font-bold' : ''}>
-                  <button onClick={()=>setSelectedClient(conv.client?.id)}>{conv.client?.name || '-'}</button>
-                </li>
-              ))}
+                {conversations
+                  .filter(conv => {
+                    if (!search) return true;
+                    const s = search.toLowerCase();
+                    return conv.client?.name && conv.client.name.toLowerCase().includes(s);
+                  })
+                  .map((conv, idx) => (
+                    <li key={idx} className={selectedClient === conv.client?.id ? 'font-bold' : ''}>
+                      <button onClick={()=>setSelectedClient(conv.client?.id)}>{conv.client?.name || '-'}</button>
+                    </li>
+                  ))}
             </ul>
           </div>
           <div className="bg-white rounded shadow p-4 col-span-2">
