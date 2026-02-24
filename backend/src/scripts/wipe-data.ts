@@ -27,11 +27,10 @@ async function wipeWorkspace(workspaceId: string) {
   await prisma.group.deleteMany({ where: { workspaceId } });
 
   // Broadcasts / Polls
-  await prisma.broadcastRecipient.deleteMany({ where: { workspaceId } });
+  await prisma.broadcastRecipient.deleteMany({ where: { broadcast: { workspaceId } } });
   await prisma.broadcast.deleteMany({ where: { workspaceId } });
-
-  await prisma.pollInteraction.deleteMany({ where: { workspaceId } });
-  await prisma.pollRecipient.deleteMany({ where: { workspaceId } });
+  await prisma.pollInteraction.deleteMany({ where: { campaign: { workspaceId } } });
+  await prisma.pollRecipient.deleteMany({ where: { campaign: { workspaceId } } });
   await prisma.pollCampaign.deleteMany({ where: { workspaceId } });
 
   // Tags e templates
