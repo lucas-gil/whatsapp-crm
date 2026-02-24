@@ -20,7 +20,7 @@ RUN npm install --legacy-peer-deps && npx --yes prisma@5.22.0 generate && npm ru
 
 # Build frontend - use install to update lock file
 WORKDIR /build/frontend
-RUN npm install --legacy-peer-deps && npm run build
+RUN ["/bin/bash", "-c", "npm install --legacy-peer-deps && npm run build"]
 
 # Ensure public directory exists (even if empty)
 RUN mkdir -p /build/frontend/public
