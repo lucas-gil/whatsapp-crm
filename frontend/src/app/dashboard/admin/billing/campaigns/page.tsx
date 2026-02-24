@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 export default function BillingCampaignsPage() {
   const [charges, setCharges] = useState<any[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<any[]>([]);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editMessage, setEditMessage] = useState<string>('');
 
   useEffect(() => {
     // Buscar todas as cobranças e status dos contatos
@@ -15,6 +17,23 @@ export default function BillingCampaignsPage() {
   // Função para agendar mensagem
   function scheduleMessage(type: string, days: number, message: string) {
     setScheduledMessages([...scheduledMessages, { type, days, message }]);
+  }
+
+  function removeMessage(idx: number) {
+    setScheduledMessages(scheduledMessages.filter((_, i) => i !== idx));
+  }
+
+  function startEdit(idx: number) {
+    setEditingIdx(idx);
+    setEditMessage(scheduledMessages[idx].message);
+  }
+
+  function saveEdit(idx: number) {
+    const updated = [...scheduledMessages];
+    updated[idx].message = editMessage;
+    setScheduledMessages(updated);
+    setEditingIdx(null);
+    setEditMessage('');
   }
 
   return (
@@ -34,8 +53,32 @@ export default function BillingCampaignsPage() {
           <div>
             <h3 className="font-bold mb-2">Mensagens agendadas:</h3>
             <ul>
+              {scheduledMessages.length === 0 && (
+                <li className="text-gray-400">Nenhuma mensagem agendada ainda.</li>
+              )}
               {scheduledMessages.map((msg, idx) => (
-                <li key={idx} className="mb-1">{msg.type} - {msg.days} dias: {msg.message}</li>
+                <li key={idx} className="mb-2 flex items-center gap-2 bg-gray-50 rounded p-2">
+                  <span className="font-semibold text-blue-700">{msg.type}</span>
+                  <span className="text-xs text-gray-500">{msg.days} dias</span>
+                  {editingIdx === idx ? (
+                    <>
+                      <input
+                        className="border rounded px-2 py-1 text-sm flex-1"
+                        value={editMessage}
+                        onChange={e => setEditMessage(e.target.value)}
+                        autoFocus
+                      />
+                      <button className="text-green-600 font-bold ml-2" onClick={()=>saveEdit(idx)}>Salvar</button>
+                      <button className="text-gray-500 ml-1" onClick={()=>setEditingIdx(null)}>Cancelar</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="ml-2 flex-1">{msg.message}</span>
+                      <button className="text-yellow-600 font-bold ml-2" onClick={()=>startEdit(idx)}>Editar</button>
+                      <button className="text-red-600 font-bold ml-1" onClick={()=>removeMessage(idx)}>Remover</button>
+                    </>
+                  )}
+                </li>
               ))}
             </ul>
           </div>
