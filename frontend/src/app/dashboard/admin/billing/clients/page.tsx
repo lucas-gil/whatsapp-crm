@@ -76,8 +76,18 @@ export default function BillingClientsPage() {
       setMsg('Contato sem número de telefone. Não é possível criar cliente.');
       return;
     }
-    const amt = typeof amount === 'string' ? parseFloat(amount || '0') : amount;
-    if (!dueDate || !amt || Number.isNaN(amt) || amt <= 0) {
+    // Corrige amount para float com ponto
+    let amt = amount;
+    if (typeof amt === 'string') {
+      amt = parseFloat(amt.replace(',', '.'));
+    }
+    // Corrige dueDate para ISO
+    let dueDateISO = dueDate;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dueDate)) {
+      const [d, m, y] = dueDate.split('/');
+      dueDateISO = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    if (!dueDateISO || !amt || Number.isNaN(amt) || amt <= 0) {
       setMsg('Preencha data de vencimento e valor maior que zero.');
       return;
     }
@@ -102,7 +112,7 @@ export default function BillingClientsPage() {
       const chargeRes = await fetchWithAuth(`${api}/billing/clients/${client.id}/charges`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId, description: description || 'Cobrança via WhatsApp', amount: Number(amt), dueDate }),
+        body: JSON.stringify({ workspaceId, description: description || 'Cobrança via WhatsApp', amount: amt, dueDate: dueDateISO }),
       });
       if (!chargeRes.ok) {
         let errorText = '';
