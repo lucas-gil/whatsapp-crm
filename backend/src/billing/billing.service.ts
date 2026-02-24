@@ -11,16 +11,7 @@ export class BillingService {
     if (!data.name || !data.phoneNumber) {
       throw new BadRequestException('Nome e telefone são obrigatórios');
     }
-    // Verifica duplicidade
-    const exists = await this.prisma.billingClient.findFirst({
-      where: {
-        workspaceId,
-        phoneNumber: data.phoneNumber
-      }
-    });
-    if (exists) {
-      throw new BadRequestException('Cliente já cadastrado com esse telefone');
-    }
+    // Permite múltiplos clientes com o mesmo telefone
     const client = await this.prisma.billingClient.create({ data: { ...data, workspaceId } });
     return client;
   }

@@ -38,7 +38,7 @@
     "@nestjs/platform-express": "^10.2.10",
     "@nestjs/platform-socket.io": "^10.2.10",
     "@nestjs/websockets": "^10.2.10",
-    "@prisma/client": "^5.7.0",
+    "@prisma/client": "^5.22.0",
     "@whiskeysockets/baileys": "^6.7.21",
     "aws-sdk": "^2.1515.0",
     "axios": "^1.6.2",
