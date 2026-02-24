@@ -11,24 +11,10 @@ export default function AuthGate({ children }: PropsWithChildren) {
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    // Abrir o modal apenas na primeira vez que o carregamento inicial terminar.
+    // Sempre abrir o modal de login ao acessar o sistema
     if (!initializedRef.current && ready) {
-      // open only if no token or backend indicated needsLogin
-      if (!token || needsLogin) setOpen(true);
+      setOpen(true);
       initializedRef.current = true;
-    }
-
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('forceLogin') === '1') {
-        setOpen(true);
-        params.delete('forceLogin');
-        const newSearch = params.toString();
-        const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-        window.history.replaceState({}, document.title, newUrl);
-      }
-    } catch (e) {
-      // ignore
     }
   }, [ready]);
 
