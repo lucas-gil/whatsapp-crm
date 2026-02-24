@@ -51,4 +51,39 @@ export class ConversationsController {
   async archiveConversation(@Param('id') id: string) {
     return this.conversationsService.archiveConversation(id);
   }
+
+  /**
+   * GET /crm/conversations/grouped-by-client
+   * Lista conversas agrupadas por cliente (lead)
+   */
+  @Get('grouped-by-client')
+  async getGroupedByClient(@Request() req: any) {
+    const workspaceId = req.user.workspaceId;
+    // Busca todas as conversas com lead e mensagens
+    const conversations = await this.conversationsService.listConversations(workspaceId);
+    // Agrupa por cliente (lead)
+    const grouped: Record<string, any> = {};
+    for (const conv of conversations) {
+      if (!conv.lead) continue;
+      if (!grouped[conv.lead.id]) {
+        grouped[conv.lead.id] = {
+          client: {
+            id: conv.lead.id,
+            name: conv.lead.name,
+            phoneNumber: conv.lead.phoneNumber,
+          },
+          messages: [],
+        };
+      }
+      if (conv.messages && conv.messages.length > 0) {
+        grouped[conv.lead.id].messages.push(...conv.messages.map((m: any) => ({
+          id: m.id,
+          text: m.text,
+          date: m.createdAt,
+          direction: m.direction,
+        })));
+      }
+    }
+    return { conversations: Object.values(grouped) };
+  }
 }

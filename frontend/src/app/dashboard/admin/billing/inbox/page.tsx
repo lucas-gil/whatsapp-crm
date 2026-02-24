@@ -6,8 +6,8 @@ export default function BillingInboxPage() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
 
   useEffect(() => {
-    // Buscar conversas dos clientes (simulação)
-    fetch('/api/billing/conversations?workspaceId=demo')
+    // Buscar conversas agrupadas por cliente (lead)
+    fetch('/api/crm/conversations/grouped-by-client')
       .then(res => res.json())
       .then(data => setConversations(data.conversations || []));
   }, []);
