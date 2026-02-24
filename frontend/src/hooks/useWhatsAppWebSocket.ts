@@ -27,8 +27,8 @@ export function useWhatsAppWebSocket(token: string | null) {
     if (!token) return;
 
     try {
-      const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/g, '') || window.location.origin;
-      const socketIo = io(`${base.replace(/\/+$/g, '')}/whatsapp`, {
+      const base = 'https://webot-app.4ziatk.easypanel.host';
+      const socketIo = io(`${base}/whatsapp`, {
         path: '/socket.io',
         query: {
           token,
