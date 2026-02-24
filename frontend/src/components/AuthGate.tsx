@@ -60,10 +60,11 @@ export default function AuthGate({ children }: PropsWithChildren) {
   }
 
 
-  // token exists: render children and a floating button to re-open login modal
+  // token exists: render children and floating buttons
   return (
     <>
       {children}
+      {/* Botão para abrir tela de login */}
       <button
         id="open-login-btn"
         onClick={() => setOpen(true)}
@@ -73,6 +74,28 @@ export default function AuthGate({ children }: PropsWithChildren) {
       >
         <span style={{ fontSize: 18, lineHeight: '18px' }}>🔐</span>
       </button>
+
+      {/* Botão de reset de login */}
+      <button
+        id="reset-login-btn"
+        onClick={async () => {
+          // Limpa todos os dados locais (contatos, mensagens, leads, etc), mas mantém o login
+          try {
+            const authToken = localStorage.getItem('authToken');
+            const adminMode = localStorage.getItem('auth_admin_mode');
+            localStorage.clear();
+            if (authToken) localStorage.setItem('authToken', authToken);
+            if (adminMode) localStorage.setItem('auth_admin_mode', adminMode);
+          } catch (e) {}
+          window.location.reload();
+        }}
+        title="Limpar dados locais (contatos, mensagens, leads, etc) sem deslogar"
+        style={{ position: 'fixed', right: 18, bottom: 80, zIndex: 2147483647 }}
+        className="bg-red-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
+      >
+        <span style={{ fontSize: 18, lineHeight: '18px' }}>♻️</span>
+      </button>
+
       {open && (
         <LoginOverlay onLogin={login} onLogout={logout} onClose={() => setOpen(false)} error={error} />
       )}
