@@ -76,7 +76,7 @@ export default function AuthGate({ children }: PropsWithChildren) {
         onClick={() => setOpen(true)}
         title="Abrir tela de login"
         style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 2147483647 }}
-        className="bg-whatsapp text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
+        className="hidden md:block bg-whatsapp text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
       >
         <span style={{ fontSize: 18, lineHeight: '18px' }}>🔐</span>
       </button>
@@ -102,7 +102,7 @@ export default function AuthGate({ children }: PropsWithChildren) {
         }}
         title="Limpar todos os dados do workspace"
         style={{ position: 'fixed', right: 18, bottom: 80, zIndex: 2147483647 }}
-        className="bg-red-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
+        className="hidden md:block bg-red-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
       >
         <span style={{ fontSize: 18, lineHeight: '18px' }}>♻️</span>
       </button>
@@ -124,7 +124,7 @@ export default function AuthGate({ children }: PropsWithChildren) {
         }}
         title="Limpar dados antigos (vencidos) do workspace"
         style={{ position: 'fixed', right: 18, bottom: 140, zIndex: 2147483647 }}
-        className="bg-yellow-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
+        className="hidden md:block bg-yellow-600 text-white p-4 rounded-full shadow-xl hover:scale-105 transition-transform"
       >
         <span style={{ fontSize: 18, lineHeight: '18px' }}>🗑️</span>
       </button>
