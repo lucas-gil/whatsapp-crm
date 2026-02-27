@@ -26,6 +26,12 @@ export class QueueService {
   }
 
   registerQueue(config: QueueConfig) {
+    // If Redis auth failed at bootstrap, skip creating queues/workers (degraded mode)
+    if (process.env.REDIS_AUTH_FAILED === 'true') {
+      this.logger.warn(`Redis auth failed; skipping registration of queue ${config.name}`);
+      this.disabledQueues.add(config.name);
+      return;
+    }
     // Criar fila
     // BullMQ/redis clients usually read credentials from the URL (recommended).
     // We ensure `REDIS_URL` contains credentials earlier (see validation/main bootstrap).

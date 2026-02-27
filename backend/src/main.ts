@@ -43,8 +43,10 @@ async function checkRedisAuth(): Promise<void> {
       console.error('   Corrija definindo as variáveis de ambiente: REDIS_PASSWORD e/ou REDIS_URL com credenciais.');
       console.error('   Exemplo: REDIS_URL=redis://:MINHA_SENHA@redis:6379');
       console.error('   Teste com: redis-cli -h <host> -p <port> -a <senha> ping');
-      console.error('   Processo será encerrado para evitar comportamento inconsistente.\n');
-      process.exit(1);
+      console.error('   Iniciando em modo degradado: filas/consumers serão desabilitados até que o Redis esteja disponível.\n');
+      // Mark that Redis auth failed so other services can behave accordingly.
+      process.env.REDIS_AUTH_FAILED = 'true';
+      return;
     }
 
     // If other error (timeout/unavailable), warn but allow startup
@@ -59,8 +61,11 @@ async function bootstrap() {
     console.log(`📌 JWT_SECRET: ${process.env.JWT_SECRET ? '✅ configurado' : '❌ NÃO configurado'}`);
     console.log(`📌 NODE_ENV: ${process.env.NODE_ENV || 'não definida'}`);
 
-    // Fail-fast Redis auth check to provide clear instructions when misconfigured
+    // Redis auth check: may mark REDIS_AUTH_FAILED and return to allow degraded startup
     await checkRedisAuth();
+    if (process.env.REDIS_AUTH_FAILED === 'true') {
+      console.warn('⚠️ Iniciando em modo degradado: Redis com autenticação falhou. Filas/consumers serão desabilitados.');
+    }
 
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);
