@@ -688,6 +688,90 @@ export class WhatsAppService {
   }
 
   /**
+   * Cleanup leads and groups that are not present in the connected WhatsApp provider.
+   * If dryRun=true, only returns the candidates without deleting.
+   */
+  async cleanupFakeEntities(workspaceId: string, dryRun = true) {
+    const mapKey = workspaceId;
+
+    const isConnected = await this.isConnected(mapKey);
+    if (!isConnected) {
+      throw new Error('WhatsApp não está conectado');
+    }
+
+    // Fetch provider contacts and groups
+    const providerContacts = await this.defaultProvider.listContacts(mapKey);
+    const providerGroups = await this.defaultProvider.listGroups(mapKey);
+
+    const providerPhones = new Set<string>(
+      (providerContacts || []).map((c: any) => String(c.phoneNumber || (c.id ? String(c.id).split('@')[0] : '')).replace(/\D/g, '')),
+    );
+    const providerGroupIds = new Set<string>((providerGroups || []).map((g: any) => String(g.id || g.whatsappGroupId)));
+
+    // Load leads and groups from DB
+    const leads = await this.prisma.lead.findMany({ where: { workspaceId } });
+    const groups = await this.prisma.group.findMany({ where: { workspaceId } });
+
+    const leadsToDelete: string[] = [];
+    const groupsToDelete: string[] = [];
+
+    for (const lead of leads) {
+      const phoneNormalized = this.normalizePhoneNumber(String(lead.phoneNumber || ''));
+      if (!phoneNormalized) continue;
+      if (providerPhones.has(phoneNormalized)) continue; // present on provider
+
+      // check if there are any messages or conversations referencing this lead
+      const hasMessages = await this.prisma.message.findFirst({
+        where: {
+          workspaceId,
+          OR: [{ senderPhoneNumber: phoneNormalized }, { conversation: { leadId: lead.id } }],
+        },
+        select: { id: true },
+      });
+
+      if (!hasMessages) {
+        leadsToDelete.push(lead.id);
+      }
+    }
+
+    for (const group of groups) {
+      const gid = String(group.whatsappGroupId || group.id || '');
+      if (providerGroupIds.has(gid)) continue;
+
+      const hasMessages = await this.prisma.message.findFirst({
+        where: {
+          workspaceId,
+          OR: [{ conversation: { groupId: group.id } }, { senderPhoneNumber: { equals: null } }],
+        },
+        select: { id: true },
+      });
+
+      // If there are no messages or conversations for the group, mark for delete
+      if (!hasMessages) {
+        groupsToDelete.push(group.id);
+      }
+    }
+
+    if (dryRun) {
+      return { leadsToDelete, groupsToDelete };
+    }
+
+    // Perform deletions
+    let deletedLeads = 0;
+    let deletedGroups = 0;
+    if (leadsToDelete.length) {
+      const res = await this.prisma.lead.deleteMany({ where: { id: { in: leadsToDelete } } });
+      deletedLeads = res.count || 0;
+    }
+    if (groupsToDelete.length) {
+      const res = await this.prisma.group.deleteMany({ where: { id: { in: groupsToDelete } } });
+      deletedGroups = res.count || 0;
+    }
+
+    return { deletedLeads, deletedGroups, leadsToDelete, groupsToDelete };
+  }
+
+  /**
    * Testar conexão (mock - sempre true se conectado)
    */
   async testConnection(workspaceId: string): Promise<boolean> {

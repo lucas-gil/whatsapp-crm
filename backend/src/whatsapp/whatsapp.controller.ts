@@ -257,6 +257,23 @@ export class WhatsAppController {
   }
 
   /**
+   * Cleanup fake contacts/groups not present on the connected WhatsApp provider.
+   * Use { dryRun: true } to preview candidates.
+   */
+  @Post('cleanup-fake')
+  async cleanupFake(@Body() body: { dryRun?: boolean }, @Request() req: any) {
+    const dryRun = body?.dryRun !== false; // default true
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    try {
+      const result = await this.whatsAppService.cleanupFakeEntities(mapKey, dryRun);
+      return { success: true, dryRun, result };
+    } catch (err: any) {
+      const msg = err?.message || String(err || 'Erro desconhecido');
+      throw new BadRequestException({ error: true, code: 'CLEANUP_ERROR', message: msg });
+    }
+  }
+
+  /**
    * Remover todas as mensagens OUTGOING deste workspace (limpeza administrativa)
    */
   @Post('cleanup-outgoing')
