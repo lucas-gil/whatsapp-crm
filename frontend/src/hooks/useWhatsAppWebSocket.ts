@@ -35,7 +35,17 @@ export function useWhatsAppWebSocket(token: string | null) {
       // Otherwise build URL from NEXT_PUBLIC_API_URL or the current origin and append the namespace.
       let base = '';
       if (envWs && envWs.trim() !== '') {
-        base = envWs.replace(/\/$/, '');
+        // If env provides a full URL, ensure it points to the `/whatsapp` namespace
+        try {
+          const parsed = new URL(envWs);
+          if (!parsed.pathname || parsed.pathname === '/') {
+            parsed.pathname = '/whatsapp';
+          }
+          base = parsed.toString().replace(/\/$/, '');
+        } catch (e) {
+          // If URL parsing fails, fallback to naive append
+          base = envWs.replace(/\/$/, '') + '/whatsapp';
+        }
       } else {
         const apiBase = (envApi || clientOrigin).replace(/\/$/, '');
         base = `${apiBase}/whatsapp`;
