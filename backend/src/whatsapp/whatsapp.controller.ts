@@ -31,7 +31,8 @@ export class WhatsAppController {
         throw new BadRequestException('Workspace ID não encontrado');
       }
 
-      const settings = await this.whatsAppService.initializeWorkspace(workspaceId);
+      const sessionId = req.user.sessionId || null;
+      const settings = await this.whatsAppService.initializeWorkspace(workspaceId, sessionId);
       return {
         status: 'initializing',
         message: 'Escaneie o código QR com seu WhatsApp',
@@ -50,7 +51,9 @@ export class WhatsAppController {
   @Get('qr-code')
   async getQRCode(@Request() req: any) {
     const workspaceId = req.user.workspaceId;
-    const qrCode = await this.whatsAppService.getQRCode(workspaceId);
+    const sessionId = req.user.sessionId || null;
+    const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
+    const qrCode = await this.whatsAppService.getQRCode(mapKey);
 
     if (!qrCode) {
       return {
@@ -73,7 +76,9 @@ export class WhatsAppController {
   @Get('status')
   async getStatus(@Request() req: any) {
     const workspaceId = req.user.workspaceId;
-    const connected = await this.whatsAppService.isConnected(workspaceId);
+    const sessionId = req.user.sessionId || null;
+    const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
+    const connected = await this.whatsAppService.isConnected(mapKey);
 
     return {
       connected,
@@ -88,7 +93,9 @@ export class WhatsAppController {
   @Post('disconnect')
   async disconnect(@Request() req: any) {
     const workspaceId = req.user.workspaceId;
-    await this.whatsAppService.disconnect(workspaceId);
+    const sessionId = req.user.sessionId || null;
+    const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
+    await this.whatsAppService.disconnect(mapKey);
 
     return {
       status: 'disconnected',
@@ -105,7 +112,9 @@ export class WhatsAppController {
       throw new BadRequestException('to e text são obrigatórios');
     }
 
-    return this.whatsAppService.sendText(req.user.workspaceId, to, text);
+    const sessionId = req.user.sessionId || null;
+    const mapKey = sessionId ? `${req.user.workspaceId}:${sessionId}` : req.user.workspaceId;
+    return this.whatsAppService.sendText(mapKey, to, text);
   }
 
   /**
@@ -124,7 +133,7 @@ export class WhatsAppController {
     }
 
     return this.whatsAppService.sendMedia(
-      req.user.workspaceId,
+      req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId,
       to,
       file.buffer,
       file.originalname,
@@ -147,8 +156,9 @@ export class WhatsAppController {
       );
     }
 
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
     return this.whatsAppService.sendPoll(
-      req.user.workspaceId,
+      mapKey,
       to,
       question,
       options,
@@ -160,7 +170,8 @@ export class WhatsAppController {
    */
   @Get('groups')
   async listGroups(@Request() req: any) {
-    return this.whatsAppService.listGroups(req.user.workspaceId);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    return this.whatsAppService.listGroups(mapKey);
   }
 
   /**
@@ -168,7 +179,8 @@ export class WhatsAppController {
    */
   @Get('contacts')
   async listContacts(@Request() req: any) {
-    return this.whatsAppService.listContacts(req.user.workspaceId);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    return this.whatsAppService.listContacts(mapKey);
   }
 
   /**
@@ -180,7 +192,8 @@ export class WhatsAppController {
       throw new BadRequestException('to e obrigatorio');
     }
 
-    const url = await this.whatsAppService.getProfilePicture(req.user.workspaceId, to);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    const url = await this.whatsAppService.getProfilePicture(mapKey, to);
     return { url };
   }
 
@@ -189,7 +202,8 @@ export class WhatsAppController {
    */
   @Post('sync-contacts')
   async syncContacts(@Request() req: any) {
-    return this.whatsAppService.syncContacts(req.user.workspaceId);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    return this.whatsAppService.syncContacts(mapKey);
   }
 
   /**
@@ -197,7 +211,8 @@ export class WhatsAppController {
    */
   @Post('cleanup-outgoing')
   async cleanupOutgoing(@Request() req: any) {
-    return this.whatsAppService.deleteOutgoingMessages(req.user.workspaceId);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    return this.whatsAppService.deleteOutgoingMessages(mapKey);
   }
 
   /**
@@ -205,15 +220,17 @@ export class WhatsAppController {
    */
   @Post('test')
   async testConnection(@Request() req: any) {
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
     const success = await this.whatsAppService.testConnection(
-      req.user.workspaceId,
+      mapKey,
     );
     return { success, status: success ? 'connected' : 'disconnected' };
   }
 
   @Get('settings')
   async getSettings(@Request() req: any) {
-    const settings = await this.whatsAppService.getSettings(req.user.workspaceId);
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
+    const settings = await this.whatsAppService.getSettings(mapKey);
     return {
       pollsEnabled: settings?.pollsEnabled ?? true,
     };
@@ -224,8 +241,9 @@ export class WhatsAppController {
     @Request() req: any,
     @Body() body: { pollsEnabled?: boolean },
   ) {
+    const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
     const settings = await this.whatsAppService.updateSettings(
-      req.user.workspaceId,
+      mapKey,
       { pollsEnabled: body.pollsEnabled },
     );
 

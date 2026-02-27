@@ -19,6 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       workspaceId: payload.workspaceId,
       licenseKeyId: payload.licenseKeyId,
       isAdmin: payload.isAdmin || false,
+      sessionId: payload.sessionId || null,
     };
   }
 }

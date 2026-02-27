@@ -16,10 +16,10 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private sessions: Map<string, any> = new Map();
   private qrCodes: Map<string, string> = new Map();
   private eventHandlers: Map<string, Set<Function>> = new Map();
-  private initializingWorkspaces: Set<string> = new Set(); // Evitar múltiplas inicializações
+  private initializingWorkspaces: Set<string> = new Set(); // Evitar múltiplas inicializações (chave: mapKey)
   private sessionStoragePath: string;
-  private connectionRetries: Map<string, number> = new Map(); // Track retries
-  private connectionStatus: Map<string, string> = new Map(); // Track connection status per workspace
+  private connectionRetries: Map<string, number> = new Map(); // Track retries keyed by mapKey
+  private connectionStatus: Map<string, string> = new Map(); // Track connection status per mapKey
   private contacts: Map<string, any[]> = new Map();
   private sendQueues: Map<string, Promise<any>> = new Map();
 
@@ -38,17 +38,17 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   async initSession(
-    workspaceId: string,
+    mapKey: string,
     options: { forceNewSession?: boolean } = {},
   ): Promise<void> {
     const forceNewSession = options.forceNewSession === true;
-    // Evitar múltiplas inicializações simultâneas
-    if (this.initializingWorkspaces.has(workspaceId)) {
-      this.logger.warn(`⚠️  Inicialização já em progresso para ${workspaceId}, ignorando requisição duplicada`);
+    // Evitar múltiplas inicializações simultâneas por mapKey
+    if (this.initializingWorkspaces.has(mapKey)) {
+      this.logger.warn(`⚠️  Inicialização já em progresso para ${mapKey}, ignorando requisição duplicada`);
       return;
     }
     
-    this.initializingWorkspaces.add(workspaceId);
+    this.initializingWorkspaces.add(mapKey);
     
     try {
       this.logger.info(`📱 Importando Baileys e QRCode...`);
@@ -64,20 +64,21 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       const QRCode = await import('qrcode');
 
       this.logger.info(`✅ Módulos importados com sucesso`);
-      this.logger.info(`💾 Inicializando pasta de sessão para workspace: ${workspaceId}`);
+      this.logger.info(`💾 Inicializando pasta de sessão para mapKey: ${mapKey}`);
 
       // Limpar socket anterior se existir
-      const existingSession = this.sessions.get(workspaceId);
+      const existingSession = this.sessions.get(mapKey);
       if (existingSession) {
         try {
           await Promise.resolve(existingSession.logout());
         } catch (e) {
           this.logger.warn(`⚠️  Erro ao fazer logout da sessão anterior`);
         }
-        this.sessions.delete(workspaceId);
+        this.sessions.delete(mapKey);
       }
 
-      const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
+      const safeName = this.sanitizeMapKey(mapKey);
+      const sessionFolder = path.join(this.sessionStoragePath, safeName);
       
       // Somente apagar sessão quando o usuário solicitar um QR novo
       if (forceNewSession && fs.existsSync(sessionFolder)) {
@@ -136,7 +137,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         const { connection, lastDisconnect, qr } = update;
 
         if (connection) {
-          this.connectionStatus.set(workspaceId, connection);
+          this.connectionStatus.set(mapKey, connection);
         }
         
         // Log detalhado para debug
@@ -150,25 +151,25 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         if (qr) {
           try {
             const qrDataUrl = await QRCode.toDataURL(qr);
-            this.qrCodes.set(workspaceId, qrDataUrl);
-            this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
-            this.logger.info(`✅ QR Code gerado e armazenado para ${workspaceId}`);
+            this.qrCodes.set(mapKey, qrDataUrl);
+            this.emitEvent(mapKey, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
+            this.logger.info(`✅ QR Code gerado e armazenado para ${mapKey}`);
           } catch (error) {
             this.logger.error(`❌ Erro ao gerar QR Data URL:`, error);
           }
         }
 
         if (connection === 'connecting') {
-          this.emitEvent(workspaceId, 'connection_status', { status: 'connecting' });
-          this.logger.info(`Conectando ${workspaceId}...`);
+          this.emitEvent(mapKey, 'connection_status', { status: 'connecting' });
+          this.logger.info(`Conectando ${mapKey}...`);
         }
 
         if (connection === 'open') {
-          this.logger.info(`✅ Conectado com sucesso: ${workspaceId}`);
-          this.emitEvent(workspaceId, 'connection_status', { status: 'connected' });
-          this.sessions.set(workspaceId, socket);
-          this.qrCodes.delete(workspaceId); // Remover QR após sucesso
-          this.connectionRetries.delete(workspaceId); // Reset retry counter
+          this.logger.info(`✅ Conectado com sucesso: ${mapKey}`);
+          this.emitEvent(mapKey, 'connection_status', { status: 'connected' });
+          this.sessions.set(mapKey, socket);
+          this.qrCodes.delete(mapKey); // Remover QR após sucesso
+          this.connectionRetries.delete(mapKey); // Reset retry counter
         }
 
         if (connection === 'close') {
@@ -178,7 +179,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             DisconnectReason[(lastDisconnect?.error as any)?.output?.statusCode] ||
             'unknown';
 
-          this.logger.warn(`❌ Desconectado (${reason}): ${workspaceId}`);
+          this.logger.warn(`❌ Desconectado (${reason}): ${mapKey}`);
           if (lastDisconnect?.error) {
             const lastError: any = lastDisconnect.error;
             try {
@@ -191,7 +192,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
               this.logger.warn('❌ Detalhes do disconnect: (erro ao serializar)');
             }
           }
-          this.emitEvent(workspaceId, 'connection_status', {
+          this.emitEvent(mapKey, 'connection_status', {
             status: 'disconnected',
             reason,
             shouldReconnect,
@@ -204,38 +205,38 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             clearTimeout(qrTimeout);
           } else if (shouldReconnect) {
             // Backoff exponencial para reconexão (AUMENTADO)
-            const retryCount = this.connectionRetries.get(workspaceId) || 0;
+            const retryCount = this.connectionRetries.get(mapKey) || 0;
             const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 60000); // Max 60s (era 30s)
             this.logger.info(`⏳ Reconectando em ${retryDelay}ms (tentativa ${retryCount + 1}/10)...`);
-            this.logger.debug(`Connection retry state for ${workspaceId}: retryCount=${retryCount}, willRetry=${true}`);
+            this.logger.debug(`Connection retry state for ${mapKey}: retryCount=${retryCount}, willRetry=${true}`);
 
             setTimeout(() => {
-              this.logger.info(`🔁 Iniciando tentativa de reconexão para ${workspaceId} (antes de chamar initSession)`);
-              this.initSession(workspaceId).catch(err => {
-                this.logger.error(`❌ Erro na tentativa de reconexão initSession for ${workspaceId}: ${err?.message || String(err)}`);
+              this.logger.info(`🔁 Iniciando tentativa de reconexão para ${mapKey} (antes de chamar initSession)`);
+              this.initSession(mapKey).catch(err => {
+                this.logger.error(`❌ Erro na tentativa de reconexão initSession for ${mapKey}: ${err?.message || String(err)}`);
               });
             }, retryDelay);
-            this.connectionRetries.set(workspaceId, Math.min(retryCount + 1, 10)); // 10 tentativas (era 5)
+            this.connectionRetries.set(mapKey, Math.min(retryCount + 1, 10)); // 10 tentativas (era 5)
           } else {
-            this.sessions.delete(workspaceId);
-            this.qrCodes.delete(workspaceId);
-            this.connectionRetries.delete(workspaceId);
+            this.sessions.delete(mapKey);
+            this.qrCodes.delete(mapKey);
+            this.connectionRetries.delete(mapKey);
           }
         }
       });
 
       (socket.ev as any).on('contacts.set', (payload: any) => {
         const contactList = Array.isArray(payload?.contacts) ? payload.contacts : [];
-        this.setContacts(workspaceId, contactList);
+        this.setContacts(mapKey, contactList);
       });
 
       (socket.ev as any).on('contacts.upsert', (contacts: any[]) => {
-        this.upsertContacts(workspaceId, contacts || []);
+        this.upsertContacts(mapKey, contacts || []);
       });
 
       // Handle credenciais alteradas
       socket.ev.on('creds.update', async () => {
-        this.logger.info(`💾 Credenciais atualizadas para ${workspaceId}`);
+        this.logger.info(`💾 Credenciais atualizadas para ${mapKey}`);
         await saveCreds();
       });
 
@@ -244,9 +245,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         (socket.ev as any).on('qr', async (qr: string) => {
           this.logger.info(`🔐 Evento 'qr' disparado diretamente`);
           const qrDataUrl = await QRCode.toDataURL(qr);
-          this.qrCodes.set(workspaceId, qrDataUrl);
-          this.emitEvent(workspaceId, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
-          this.logger.info(`✅ QR Code gerado do evento direto para ${workspaceId}`);
+          this.qrCodes.set(mapKey, qrDataUrl);
+          this.emitEvent(mapKey, 'qr', { qr: qrDataUrl, timestamp: Date.now() });
+          this.logger.info(`✅ QR Code gerado do evento direto para ${mapKey}`);
         });
       } catch (err) {
         // Silenciar se não funcionar
@@ -254,7 +255,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       // Listener de erro
       (socket.ev as any).on('error', (error: any) => {
-        this.logger.error(`🔴 Socket error: ${error?.message || JSON.stringify(error)}`);
+        this.logger.error(`🔴 Socket error [${mapKey}]: ${error?.message || JSON.stringify(error)}`);
         this.logger.error(`🔴 Stack: ${error?.stack?.substring(0, 300)}`);
       });
 
@@ -268,24 +269,24 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
             const selectedOptions = (rawSelected as any[]).map((opt: any) =>
               opt?.toString ? opt.toString() : String(opt),
             );
-            this.emitEvent(workspaceId, 'poll_update', {
-              from: message.key.remoteJid,
-              pollMessageId: pollUpdate.pollCreationMessageKey?.id,
-              selectedOptions,
-              timestamp: message.messageTimestamp,
-            });
+              this.emitEvent(mapKey, 'poll_update', {
+                from: message.key.remoteJid,
+                pollMessageId: pollUpdate.pollCreationMessageKey?.id,
+                selectedOptions,
+                timestamp: message.messageTimestamp,
+              });
             return;
           }
 
-          this.emitEvent(workspaceId, 'message_received', {
-            from: message.key.remoteJid,
-            participant: message.key.participant,
-            pushName: message.pushName,
-            messageId: message.key.id,
-            timestamp: message.messageTimestamp,
-            text: message.message?.conversation || message.message?.extendedTextMessage?.text,
-            type: this.getMessageType(message),
-          });
+            this.emitEvent(mapKey, 'message_received', {
+              from: message.key.remoteJid,
+              participant: message.key.participant,
+              pushName: message.pushName,
+              messageId: message.key.id,
+              timestamp: message.messageTimestamp,
+              text: message.message?.conversation || message.message?.extendedTextMessage?.text,
+              type: this.getMessageType(message),
+            });
         }
       });
 
@@ -293,7 +294,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       socket.ev.on('messages.update' as any, (updates: any[]) => {
         updates.forEach(({ key, update }) => {
           if (update.status) {
-            this.emitEvent(workspaceId, 'message_status', {
+            this.emitEvent(mapKey, 'message_status', {
               messageId: key.id,
               status: update.status,
               timestamp: Date.now(),
@@ -304,8 +305,8 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
       // Handle chamadas (opcional)
       socket.ev.on('call', async (callData) => {
-        this.logger.info(`Chamada recebida: ${JSON.stringify(callData)}`);
-        this.emitEvent(workspaceId, 'call', callData);
+        this.logger.info(`Chamada recebida [${mapKey}]: ${JSON.stringify(callData)}`);
+        this.emitEvent(mapKey, 'call', callData);
       });
 
       // Debug: Log de todos os eventos para entender qual está disparando
@@ -314,50 +315,50 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         Object.keys(update).forEach(key => {
           const val = (update as any)[key];
           if (val !== null && val !== undefined) {
-            this.logger.debug(`📶 connection.update propriedade: ${key} = ${typeof val}`);
+            this.logger.debug(`📶 connection.update propriedade [${mapKey}]: ${key} = ${typeof val}`);
           }
         });
       });
 
-      this.sessions.set(workspaceId, socket);
-      this.logger.info(`✅ Sessão inicializada com sucesso para ${workspaceId}`);
+      this.sessions.set(mapKey, socket);
+      this.logger.info(`✅ Sessão inicializada com sucesso para ${mapKey}`);
       this.logger.info(`📲 Socket está pronto para receber eventos de QR code`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = (error instanceof Error ? error.stack : '') || '';
-      this.logger.error(`❌ Erro ao inicializar sessão ${workspaceId}:`);
+      this.logger.error(`❌ Erro ao inicializar sessão ${mapKey}:`);
       this.logger.error(`   Tipo: ${error?.constructor?.name}`);
       this.logger.error(`   Mensagem: ${errorMessage}`);
       this.logger.error(`   Stack: ${errorStack.substring(0, 500)}`);
       throw error;
     } finally {
-      this.initializingWorkspaces.delete(workspaceId);
+      this.initializingWorkspaces.delete(mapKey);
     }
   }
 
-  async getQRCode(workspaceId: string): Promise<string | null> {
-    const qr = this.qrCodes.get(workspaceId);
+  async getQRCode(mapKey: string): Promise<string | null> {
+    const qr = this.qrCodes.get(mapKey);
     
     if (qr) {
-      this.logger.debug(`✅ QR Code found for workspace: ${workspaceId}`);
+      this.logger.debug(`✅ QR Code found for mapKey: ${mapKey}`);
       return qr;
     }
 
     // Verificar se sessão já existe e aguardar QR
-    const session = this.sessions.get(workspaceId);
-    const status = this.connectionStatus.get(workspaceId);
+    const session = this.sessions.get(mapKey);
+    const status = this.connectionStatus.get(mapKey);
     if (session && status !== 'close' && status !== 'disconnected') {
-      this.logger.info(`📱 Sessão já existe para ${workspaceId}, aguardando QR code por até 5 minutos...`);
+      this.logger.info(`📱 Sessão já existe para ${mapKey}, aguardando QR code por até 5 minutos...`);
       // Aguardar até 300 segundos (5 minutos) por um QR code existente
       let sessionDisconnected = false;
       for (let i = 0; i < 600; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
-        const existingQr = this.qrCodes.get(workspaceId);
+        const existingQr = this.qrCodes.get(mapKey);
         if (existingQr) {
           this.logger.info(`✅ QR Code obtido após ${(i + 1) * 500}ms`);
           return existingQr;
         }
-        const currentStatus = this.connectionStatus.get(workspaceId);
+        const currentStatus = this.connectionStatus.get(mapKey);
         if (currentStatus === 'close' || currentStatus === 'disconnected') {
           this.logger.warn(`⚠️ Sessão desconectou antes do QR, iniciando nova tentativa...`);
           sessionDisconnected = true;
@@ -374,17 +375,17 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     }
 
     if (session && (status === 'close' || status === 'disconnected')) {
-      this.sessions.delete(workspaceId);
-      this.qrCodes.delete(workspaceId);
-      this.connectionStatus.delete(workspaceId);
+      this.sessions.delete(mapKey);
+      this.qrCodes.delete(mapKey);
+      this.connectionStatus.delete(mapKey);
     }
 
     // Tentar até 5 vezes para obter QR (foi 3, aumentado para 5)
     for (let attempt = 1; attempt <= 5; attempt++) {
-      this.logger.info(`📱 Iniciando nova sessão para ${workspaceId}... (tentativa ${attempt}/5)`);
+      this.logger.info(`📱 Iniciando nova sessão para ${mapKey}... (tentativa ${attempt}/5)`);
       
       try {
-        await this.initSession(workspaceId);
+        await this.initSession(mapKey);
       } catch (error) {
         this.logger.error(`❌ Erro ao inicializar sessão (tentativa ${attempt}):`, error);
         if (attempt < 5) {
@@ -398,9 +399,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       
       // Aguardar geração de QR (máximo 300 segundos = 5 minutos com polling a cada 500ms)
       this.logger.info(`⏳ Aguardando geração de QR code por até 5 minutos (300 segundos)...`);
-      for (let i = 0; i < 600; i++) {
+        for (let i = 0; i < 600; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
-        const generatedQr = this.qrCodes.get(workspaceId);
+        const generatedQr = this.qrCodes.get(mapKey);
         if (generatedQr) {
           this.logger.info(`✅ QR Code gerado com sucesso após ${(i + 1) * 500}ms (tentativa ${attempt})`);
           return generatedQr;
@@ -413,7 +414,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.warn(`⏳ QR Code não foi gerado após 5 minutos (tentativa ${attempt}/5)`);
       
       // Limpar a sessão para próxima tentativa
-      const session = this.sessions.get(workspaceId);
+      const session = this.sessions.get(mapKey);
       if (session) {
         try {
           await session.logout();
@@ -421,9 +422,9 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
           // Ignorar erros de logout
         }
       }
-      this.sessions.delete(workspaceId);
-      this.qrCodes.delete(workspaceId);
-      this.connectionStatus.delete(workspaceId);
+      this.sessions.delete(mapKey);
+      this.qrCodes.delete(mapKey);
+      this.connectionStatus.delete(mapKey);
       
       if (attempt < 5) {
         const delay = 5000 * attempt; // 5s, 10s, 15s, 20s, 25s
@@ -432,7 +433,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       }
     }
 
-    this.logger.error(`❌ Falha ao gerar QR code após 5 tentativas (25 minutos totais) para ${workspaceId}`);
+    this.logger.error(`❌ Falha ao gerar QR code após 5 tentativas (25 minutos totais) para ${mapKey}`);
     this.logger.error(`❌ Possíveis problemas:
       1. 🌐 Conectividade de rede (check internet connection)
       2. 🚫 WhatsApp está bloqueando sua region/IP (try VPN)
@@ -443,42 +444,43 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     return null;
   }
 
-  async isConnected(workspaceId: string): Promise<boolean> {
-    const session = this.sessions.get(workspaceId);
+  async isConnected(mapKey: string): Promise<boolean> {
+    const session = this.sessions.get(mapKey);
     return session?.user ? true : false;
   }
 
-  async disconnect(workspaceId: string): Promise<void> {
-    const session = this.sessions.get(workspaceId);
+  async disconnect(mapKey: string): Promise<void> {
+    const session = this.sessions.get(mapKey);
     if (session) {
       try {
         await session.logout();
       } catch (error) {
-        this.logger.error(`Erro ao fazer logout ${workspaceId}:`, error);
+        this.logger.error(`Erro ao fazer logout ${mapKey}:`, error);
       }
       // Limpar arquivos de sessão
-      const sessionFolder = path.join(this.sessionStoragePath, workspaceId);
+      const safeName = this.sanitizeMapKey(mapKey);
+      const sessionFolder = path.join(this.sessionStoragePath, safeName);
       if (fs.existsSync(sessionFolder)) {
         fs.rmSync(sessionFolder, { recursive: true, force: true });
       }
     }
-    this.sessions.delete(workspaceId);
-    this.qrCodes.delete(workspaceId);
-    this.connectionRetries.delete(workspaceId);
-    this.connectionStatus.delete(workspaceId);
-    this.contacts.delete(workspaceId);
-    this.logger.info(`Desconectado: ${workspaceId}`);
+    this.sessions.delete(mapKey);
+    this.qrCodes.delete(mapKey);
+    this.connectionRetries.delete(mapKey);
+    this.connectionStatus.delete(mapKey);
+    this.contacts.delete(mapKey);
+    this.logger.info(`Desconectado: ${mapKey}`);
   }
 
-  async sendText(workspaceId: string, to: string, text: string): Promise<{ messageId: string; timestamp?: number }> {
-    const socket = this.sessions.get(workspaceId);
+  async sendText(mapKey: string, to: string, text: string): Promise<{ messageId: string; timestamp?: number }> {
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
 
     try {
       const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-      const response = await this.enqueueSend(workspaceId, () => this.sendMessageWithRetries(socket, jid, { text }));
+      const response = await this.enqueueSend(mapKey, () => this.sendMessageWithRetries(socket, jid, { text }));
       const messageId = response.key.id;
       // Tenta extrair timestamp retornado pelo Baileys
       const ts =
@@ -488,7 +490,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         Date.now();
 
       this.logger.info(`✉️ Mensagem enviada para ${to}: ${messageId} (ts=${ts})`);
-      this.emitEvent(workspaceId, 'message_sent', {
+      this.emitEvent(mapKey, 'message_sent', {
         to,
         messageId,
         timestamp: ts,
@@ -502,16 +504,16 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   async sendMedia(
-    workspaceId: string,
+    mapKey: string,
     to: string,
     media: Buffer,
     fileName: string,
     mimeType: string,
     caption?: string,
   ): Promise<{ messageId: string; timestamp?: number }> {
-    const socket = this.sessions.get(workspaceId);
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
 
     try {
@@ -526,7 +528,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         messagePayload.caption = caption;
       }
 
-      const response = await this.enqueueSend(workspaceId, () => this.sendMessageWithRetries(socket, jid, messagePayload));
+      const response = await this.enqueueSend(mapKey, () => this.sendMessageWithRetries(socket, jid, messagePayload));
       const messageId = response.key.id;
       const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
       this.logger.info(`📎 Mídia enviada para ${to}: ${messageId} (ts=${ts})`);
@@ -538,14 +540,14 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   async sendPoll(
-    workspaceId: string,
+    mapKey: string,
     to: string,
     question: string,
     options: string[],
   ): Promise<{ messageId: string; timestamp?: number }> {
-    const socket = this.sessions.get(workspaceId);
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
 
     try {
@@ -554,7 +556,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         `🧪 Enviando enquete: jid=${jid} options=${options.length} question=${question.substring(0, 40)}`,
       );
       const response = await this.enqueueSend(
-        workspaceId,
+        mapKey,
         () => this.sendMessageWithRetries(socket, jid, {
           poll: {
             name: question,
@@ -606,18 +608,18 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   // Ensure sends are serialized per workspace to avoid concurrent socket issues
-  private async enqueueSend(workspaceId: string, fn: () => Promise<any>): Promise<any> {
-    const prev = this.sendQueues.get(workspaceId) || Promise.resolve();
+  private async enqueueSend(mapKey: string, fn: () => Promise<any>): Promise<any> {
+    const prev = this.sendQueues.get(mapKey) || Promise.resolve();
     const next = prev.then(() => fn()).catch((e) => { throw e; });
     // Prevent unhandled rejection by attaching catch
-    this.sendQueues.set(workspaceId, next.catch(() => {}));
+    this.sendQueues.set(mapKey, next.catch(() => {}));
     return next;
   }
 
-  async listGroups(workspaceId: string): Promise<any[]> {
-    const socket = this.sessions.get(workspaceId);
+  async listGroups(mapKey: string): Promise<any[]> {
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
 
     try {
@@ -630,13 +632,13 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         participantCount: g.participants?.length || 0,
       }));
     } catch (error) {
-      this.logger.error(`Erro ao listar grupos para ${workspaceId}:`, error);
+      this.logger.error(`Erro ao listar grupos para ${mapKey}:`, error);
       throw error;
     }
   }
 
-  async listContacts(workspaceId: string): Promise<any[]> {
-    const contacts = this.contacts.get(workspaceId) || [];
+  async listContacts(mapKey: string): Promise<any[]> {
+    const contacts = this.contacts.get(mapKey) || [];
     return contacts;
   }
 
@@ -658,16 +660,16 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   }
 
   // ========== EVENT EMITTER ==========
-  on(workspaceId: string, event: string, handler: Function): void {
-    const key = `${workspaceId}:${event}`;
+  on(mapKey: string, event: string, handler: Function): void {
+    const key = `${mapKey}:${event}`;
     if (!this.eventHandlers.has(key)) {
       this.eventHandlers.set(key, new Set());
     }
     this.eventHandlers.get(key)!.add(handler);
   }
 
-  off(workspaceId: string, event: string, handler?: Function): void {
-    const key = `${workspaceId}:${event}`;
+  off(mapKey: string, event: string, handler?: Function): void {
+    const key = `${mapKey}:${event}`;
     if (handler) {
       this.eventHandlers.get(key)?.delete(handler);
     } else {
@@ -675,31 +677,31 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     }
   }
 
-  async testConnection(workspaceId: string): Promise<boolean> {
-    const session = this.sessions.get(workspaceId);
+  async testConnection(mapKey: string): Promise<boolean> {
+    const session = this.sessions.get(mapKey);
     return session?.user ? true : false;
   }
 
-  async getGroupInfo(workspaceId: string, groupId: string): Promise<any> {
-    const socket = this.sessions.get(workspaceId);
+  async getGroupInfo(mapKey: string, groupId: string): Promise<any> {
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
     try {
       return await socket.groupMetadata(groupId);
     } catch (error) {
-      this.logger.error(`Erro ao obter info do grupo ${groupId}:`, error);
+      this.logger.error(`Erro ao obter info do grupo ${groupId} (mapKey=${mapKey}):`, error);
       return null;
     }
   }
 
   async getProfilePicture(
-    workspaceId: string,
+    mapKey: string,
     phoneNumber: string,
   ): Promise<string | null> {
-    const socket = this.sessions.get(workspaceId);
+    const socket = this.sessions.get(mapKey);
     if (!socket?.user) {
-      throw new Error(`Não conectado ao WhatsApp para ${workspaceId}`);
+      throw new Error(`Não conectado ao WhatsApp para ${mapKey}`);
     }
     try {
       const target =
@@ -711,39 +713,43 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       }
       return await socket.profilePictureUrl(target);
     } catch (error) {
-      this.logger.error(`Erro ao obter foto do perfil ${phoneNumber}:`, error);
+      this.logger.error(`Erro ao obter foto do perfil ${phoneNumber} (mapKey=${mapKey}):`, error);
       return null;
     }
   }
 
-  private emitEvent(workspaceId: string, event: string, payload: any): void {
-    const key = `${workspaceId}:${event}`;
+  private emitEvent(mapKey: string, event: string, payload: any): void {
+    const key = `${mapKey}:${event}`;
     const handlers = this.eventHandlers.get(key);
     if (handlers) {
       handlers.forEach((handler) => {
         try {
           handler(payload);
         } catch (error) {
-          this.logger.error(`Erro ao executar handler de evento ${event}:`, error);
+          this.logger.error(`Erro ao executar handler de evento ${event} (mapKey=${mapKey}):`, error);
         }
       });
     }
   }
 
-  private setContacts(workspaceId: string, contacts: any[]): void {
+  private setContacts(mapKey: string, contacts: any[]): void {
     const normalized = this.normalizeContacts(contacts);
-    this.contacts.set(workspaceId, normalized);
+    this.contacts.set(mapKey, normalized);
   }
 
-  private upsertContacts(workspaceId: string, contacts: any[]): void {
-    const existing = this.contacts.get(workspaceId) || [];
+  private upsertContacts(mapKey: string, contacts: any[]): void {
+    const existing = this.contacts.get(mapKey) || [];
     const byId = new Map(existing.map((c: any) => [c.id, c]));
 
     this.normalizeContacts(contacts).forEach((contact) => {
       byId.set(contact.id, { ...byId.get(contact.id), ...contact });
     });
 
-    this.contacts.set(workspaceId, Array.from(byId.values()));
+    this.contacts.set(mapKey, Array.from(byId.values()));
+  }
+
+  private sanitizeMapKey(mapKey: string): string {
+    return String(mapKey).replace(/[:\\/]/g, '__');
   }
 
   private normalizeContacts(contacts: any[]): any[] {

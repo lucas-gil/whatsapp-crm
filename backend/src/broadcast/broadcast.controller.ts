@@ -103,7 +103,9 @@ export class BroadcastController {
   @Post(':id/start')
   async startBroadcast(@Request() req: any, @Param('id') broadcastId: string) {
     const workspaceId = req.user.workspaceId;
-    return this.broadcastService.startBroadcast(workspaceId, broadcastId);
+    const sessionId = req.user.sessionId || null;
+    const mapKey = sessionId ? `${workspaceId}:${sessionId}` : null;
+    return this.broadcastService.startBroadcast(workspaceId, broadcastId, mapKey);
   }
 
   /**

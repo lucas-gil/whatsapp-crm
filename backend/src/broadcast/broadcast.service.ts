@@ -2,10 +2,11 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBroadcastDto, UpdateBroadcastDto, AddBroadcastRecipientsDto } from './dto/broadcast.dto';
+import { BroadcastProducer } from '../queue/queue.service';
 
 @Injectable()
 export class BroadcastService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private broadcastProducer: BroadcastProducer) {}
 
   /**
    * Criar novo broadcast (disparador em massa)
@@ -219,7 +220,7 @@ export class BroadcastService {
    * Iniciar/executar broadcast (enfileirar envios)
    * Aplicar rate limit + segmentação
    */
-  async startBroadcast(workspaceId: string, broadcastId: string) {
+  async startBroadcast(workspaceId: string, broadcastId: string, mapKey: string | null = null) {
     const broadcast = await this.prisma.broadcast.findUnique({
       where: { id: broadcastId },
       include: { recipients: true },
@@ -242,8 +243,14 @@ export class BroadcastService {
       },
     });
 
-    // TODO: Enfileirar jobs no BullMQ para enviar mensagens com rate limiting
-    // BroadcastQueue.add('send-broadcast', { broadcastId, workspaceId });
+    // Enfileirar jobs no BullMQ para enviar mensagens com rate limiting
+    const recipients = broadcast.recipients || [];
+    const batchSize = Math.max(1, Math.floor((broadcast.messagesPerMinute || 20) / 1)); // Simplified batching
+
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize).map(r => ({ id: r.id, phoneNumber: r.phoneNumber, groupId: r.groupId }));
+      await this.broadcastProducer.enqueueBroadcast(mapKey, broadcastId, batch);
+    }
 
     return { status: 'iniciado', broadcastId };
   }

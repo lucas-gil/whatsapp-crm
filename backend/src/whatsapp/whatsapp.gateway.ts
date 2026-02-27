@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '../common/utils/logger.util';
 import { WhatsAppService } from './whatsapp.service';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: {
@@ -19,11 +20,14 @@ import { JwtService } from '@nestjs/jwt';
 export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private logger = new Logger('WhatsAppGateway');
-  private clientWorkspaceMap: Map<string, string> = new Map(); // socketId -> workspaceId
+  private clientWorkspaceMap: Map<string, string> = new Map(); // socketId -> workspaceId:sessionId
+  private registeredWorkspaces: Set<string> = new Set();
+  private workspaceHandlers: Map<string, Record<string, Function>> = new Map();
 
   constructor(
     private whatsAppService: WhatsAppService,
     private jwtService: JwtService,
+    private prisma: PrismaService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -36,10 +40,19 @@ export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   handleDisconnect(client: Socket) {
-    const workspaceId = this.clientWorkspaceMap.get(client.id);
-    if (workspaceId) {
+    const mapKey = this.clientWorkspaceMap.get(client.id);
+    if (mapKey) {
       this.clientWorkspaceMap.delete(client.id);
+
+      // If no more sockets are in the room after this disconnect, remove handlers
+      const roomName = `whatsapp:${mapKey}`;
+      const room = this.server.sockets.adapter.rooms.get(roomName);
+      const roomSize = room ? room.size : 0;
+      if (roomSize === 0) {
+        this.removeEventListenersForWorkspace(mapKey);
+      }
     }
+
     this.logger.info(`Cliente desconectado do WebSocket: ${client.id}`);
   }
 
@@ -47,25 +60,44 @@ export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Subscribe para eventos do WhatsApp de um workspace
    */
   @SubscribeMessage('subscribe')
-  onSubscribe(client: Socket, data: { token: string }): void {
+  async onSubscribe(client: Socket, data: { token: string }): Promise<void> {
     try {
       const decoded = this.jwtService.verify(data.token);
       const workspaceId = decoded.workspaceId;
+      let sessionId = decoded.sessionId || null;
 
-      this.clientWorkspaceMap.set(client.id, workspaceId);
-      client.join(`whatsapp:${workspaceId}`);
+      if (!sessionId) {
+        try {
+          const sess = await this.prisma.userSession.findFirst({ where: { jwtToken: data.token } });
+          sessionId = sess?.id || null;
+        } catch (e) {
+          this.logger.warn('Não foi possível buscar sessionId pelo token');
+        }
+      }
 
-      this.logger.info(
-        `Cliente ${client.id} subscribed a eventos de ${workspaceId}`,
-      );
+      if (!sessionId) {
+        this.logger.error('Token válido mas sessionId não encontrado');
+        client.emit('error', { message: 'Session inválida' });
+        return;
+      }
+
+      const mapKey = `${workspaceId}:${sessionId}`;
+      this.clientWorkspaceMap.set(client.id, mapKey);
+      client.join(`whatsapp:${mapKey}`);
+
+      this.logger.info(`Cliente ${client.id} subscribed a eventos de ${mapKey}`);
 
       client.emit('subscribed', {
         workspaceId,
+        sessionId,
         timestamp: new Date(),
       });
 
-      // Registrar listeners de eventos
-      this.setupEventListeners(workspaceId);
+      // Garantir que exista sessão WhatsApp para este login
+      await this.whatsAppService.initializeWorkspace(workspaceId, sessionId);
+
+      // Registrar listeners de eventos para este sessionKey
+      this.setupEventListeners(mapKey, workspaceId, sessionId);
     } catch (error) {
       this.logger.error('Erro ao validar token:', error);
       client.emit('error', {
@@ -80,45 +112,72 @@ export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('unsubscribe')
   onUnsubscribe(client: Socket): void {
     const workspaceId = this.clientWorkspaceMap.get(client.id);
-    if (workspaceId) {
-      client.leave(`whatsapp:${workspaceId}`);
-      this.clientWorkspaceMap.delete(client.id);
-      this.logger.info(`Cliente ${client.id} unsubscribed`);
+    if (!workspaceId) return;
+
+    client.leave(`whatsapp:${workspaceId}`);
+    this.clientWorkspaceMap.delete(client.id);
+    this.logger.info(`Cliente ${client.id} unsubscribed from ${workspaceId}`);
+
+    // If no more sockets are in the room, remove the gateway-level handlers to avoid memory leaks
+    const roomName = `whatsapp:${workspaceId}`;
+    const room = this.server.sockets.adapter.rooms.get(roomName);
+    const roomSize = room ? room.size : 0;
+    if (roomSize === 0) {
+      this.removeEventListenersForWorkspace(workspaceId);
     }
   }
 
   /**
-   * Configurar listeners de eventos
+   * Configurar listeners de eventos para um sessionKey
    */
-  private setupEventListeners(workspaceId: string): void {
-    // QR Code
-    this.whatsAppService.onEvent(workspaceId, 'qr', (payload: any) => {
-      this.server.to(`whatsapp:${workspaceId}`).emit('qr_updated', payload);
+  private setupEventListeners(mapKey: string, workspaceId: string, sessionId: string): void {
+    // Register handlers only once per sessionKey to avoid duplicate emits and memory leaks
+    if (this.registeredWorkspaces.has(mapKey)) return;
+
+    const handlers: Record<string, Function> = {};
+
+    handlers['qr'] = (payload: any) => {
+      this.server.to(`whatsapp:${mapKey}`).emit('qr_updated', payload);
+    };
+
+    handlers['connection_status'] = (payload: any) => {
+      this.server.to(`whatsapp:${mapKey}`).emit('connection_status', payload);
+    };
+
+    handlers['message_received'] = (payload: any) => {
+      this.server.to(`whatsapp:${mapKey}`).emit('message_received', payload);
+    };
+
+    handlers['message_status'] = (payload: any) => {
+      this.server.to(`whatsapp:${mapKey}`).emit('message_status', payload);
+    };
+
+    handlers['message_sent'] = (payload: any) => {
+      this.server.to(`whatsapp:${mapKey}`).emit('message_sent', payload);
+    };
+
+    Object.keys(handlers).forEach((event) => {
+      this.whatsAppService.onEvent(mapKey, event, handlers[event]);
     });
 
-    // Status de conexão
-    this.whatsAppService.onEvent(workspaceId, 'connection_status', (payload: any) => {
-      this.server
-        .to(`whatsapp:${workspaceId}`)
-        .emit('connection_status', payload);
-    });
+    this.workspaceHandlers.set(mapKey, handlers);
+    this.registeredWorkspaces.add(mapKey);
+  }
 
-    // Mensagem recebida
-    this.whatsAppService.onEvent(workspaceId, 'message_received', (payload: any) => {
-      this.server
-        .to(`whatsapp:${workspaceId}`)
-        .emit('message_received', payload);
+  private removeEventListenersForWorkspace(mapKey: string): void {
+    if (!this.registeredWorkspaces.has(mapKey)) return;
+    const handlers = this.workspaceHandlers.get(mapKey) || {};
+    Object.keys(handlers).forEach((event) => {
+      try {
+        this.whatsAppService.offEvent(mapKey, event, handlers[event]);
+      } catch (e) {
+        const msg = (e as any)?.message ? (e as any).message : String(e);
+        this.logger.warn(`Erro ao remover handler ${event} para ${mapKey}: ${msg}`);
+      }
     });
-
-    // Status de mensagem
-    this.whatsAppService.onEvent(workspaceId, 'message_status', (payload: any) => {
-      this.server.to(`whatsapp:${workspaceId}`).emit('message_status', payload);
-    });
-
-    // Mensagem enviada
-    this.whatsAppService.onEvent(workspaceId, 'message_sent', (payload: any) => {
-      this.server.to(`whatsapp:${workspaceId}`).emit('message_sent', payload);
-    });
+    this.workspaceHandlers.delete(mapKey);
+    this.registeredWorkspaces.delete(mapKey);
+    this.logger.info(`Gateway handlers removed for ${mapKey}`);
   }
 
   /**

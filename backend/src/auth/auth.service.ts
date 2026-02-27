@@ -130,9 +130,9 @@ export class AuthService {
     // Determinar se esta chave tem privilégios de admin
     const isAdmin = licenseKey.type === 'ADMIN_INFINITE';
 
-    // Gerar JWT
+    // Gerar JWT temporário (será reemitido com sessionId após criar sessão)
     const jwtExpiry = this.configService.get('JWT_EXPIRY', '24h');
-    const jwtToken = this.jwtService.sign(
+    const tempToken = this.jwtService.sign(
       {
         sub: licenseKey.id,
         workspaceId: workspace.id,
@@ -142,17 +142,17 @@ export class AuthService {
       { expiresIn: jwtExpiry },
     );
 
-    this.logger.info(`✅ JWT gerado: ${jwtToken.substring(0, 50)}...`);
+    this.logger.info(`✅ JWT temporário gerado`);
 
-    // Criar sessão
+    // Criar sessão (salvaremos o token definitivo depois)
     const jwtExpiresAt = new Date();
     jwtExpiresAt.setHours(jwtExpiresAt.getHours() + 24);
 
-    const session = await this.prisma.userSession.create({
+    let session = await this.prisma.userSession.create({
       data: {
         workspaceId: workspace.id,
         licenseKeyId: licenseKey.id,
-        jwtToken,
+        jwtToken: tempToken,
         jwtExpiresAt,
         ipAddress,
         userAgent,
@@ -161,10 +161,30 @@ export class AuthService {
     });
 
     this.logger.info(`✅ Sessão criada: ${session.id}`);
+
+    // Re-sign JWT incluindo sessionId para permitir escopo por login
+    const finalToken = this.jwtService.sign(
+      {
+        sub: licenseKey.id,
+        workspaceId: workspace.id,
+        licenseKeyId: licenseKey.id,
+        isAdmin,
+        sessionId: session.id,
+      },
+      { expiresIn: jwtExpiry },
+    );
+
+    // Atualizar sessão com token final
+    session = await this.prisma.userSession.update({
+      where: { id: session.id },
+      data: { jwtToken: finalToken },
+    });
+
+    this.logger.info(`✅ JWT final emitido e sessão atualizada`);
     this.logger.info(`✅ Login bem-sucedido para ${ipAddress}`);
 
     return {
-      accessToken: jwtToken,
+      accessToken: session.jwtToken,
       tokenType: 'Bearer',
       expiresIn: 86400,
       workspaceId: workspace.id,

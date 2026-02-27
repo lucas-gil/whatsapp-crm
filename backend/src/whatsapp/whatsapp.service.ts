@@ -16,6 +16,13 @@ export class WhatsAppService {
   private defaultProvider: WhatsAppProvider;
   private eventCallbacks: Map<string, Set<Function>> = new Map();
   private recentJids: Map<string, Map<string, string>> = new Map();
+  private registeredWorkspaces: Set<string> = new Set();
+  private providerHandlers: Map<string, Record<string, Function>> = new Map();
+
+  private extractWorkspaceId(mapKeyOrWorkspaceId: string): string {
+    if (!mapKeyOrWorkspaceId) return mapKeyOrWorkspaceId;
+    return String(mapKeyOrWorkspaceId).includes(':') ? String(mapKeyOrWorkspaceId).split(':')[0] : mapKeyOrWorkspaceId;
+  }
 
   constructor(
     private configService: ConfigService,
@@ -57,9 +64,10 @@ export class WhatsAppService {
   /**
    * Inicializa a conexão WhatsApp
    */
-  async initializeWorkspace(workspaceId: string) {
+  async initializeWorkspace(workspaceId: string, sessionId?: string) {
+    const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
     try {
-      this.logger.info(`🔄 Inicializando WhatsApp para workspace: ${workspaceId}`);
+      this.logger.info(`🔄 Inicializando WhatsApp para workspace: ${workspaceId} session=${sessionId || 'default'}`);
 
       const settings = await this.prisma.whatsAppSettings.upsert({
         where: { workspaceId },
@@ -74,22 +82,23 @@ export class WhatsAppService {
 
       this.logger.info(`💾 Configurações salvas no banco`);
 
-      // Inicializar provider
-      this.logger.info(`📱 Iniciando sessão Baileys...`);
-      await this.defaultProvider.initSession(workspaceId, { forceNewSession: true });
+      // Inicializar provider para this sessão (mapKey)
+      this.logger.info(`📱 Iniciando sessão Baileys para ${mapKey}...`);
+      await this.defaultProvider.initSession(mapKey, { forceNewSession: true });
 
       this.logger.info(`✅ Sessão Baileys inicializada`);
 
-      // Registrar event handlers para este workspace
-      this.setupEventListenersForWorkspace(workspaceId);
 
-      this.logger.info(`✅ WhatsApp inicializado com sucesso para workspace: ${workspaceId}`);
+      // Registrar event handlers para este sessionKey
+      this.setupEventListenersForWorkspace(mapKey);
+
+      this.logger.info(`✅ WhatsApp inicializado com sucesso para ${mapKey}`);
 
       return settings;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : '';
-      this.logger.error(`❌ Erro ao inicializar WhatsApp ${workspaceId}:`);
+      this.logger.error(`❌ Erro ao inicializar WhatsApp ${mapKey}:`);
       this.logger.error(`   Mensagem: ${errorMessage}`);
       this.logger.error(`   Stack: ${errorStack}`);
       throw new Error(`Falha na inicialização: ${errorMessage}`);
@@ -112,10 +121,11 @@ export class WhatsAppService {
     return qr;
   }
 
-  async isConnected(workspaceId: string): Promise<boolean> {
+  async isConnected(mapKeyOrWorkspaceId: string): Promise<boolean> {
+    const wsId = this.extractWorkspaceId(mapKeyOrWorkspaceId);
     try {
-      // Prefer DB state when possible
-      const settings = await this.prisma.whatsAppSettings.findUnique({ where: { workspaceId } });
+      // Prefer DB state when possible (based on workspace id)
+      const settings = await this.prisma.whatsAppSettings.findUnique({ where: { workspaceId: wsId } });
       if (settings?.isConnected) return true;
     } catch (err) {
       // ignore
@@ -123,7 +133,7 @@ export class WhatsAppService {
 
     if (this.defaultProvider && typeof this.defaultProvider.isConnected === 'function') {
       try {
-        return await this.defaultProvider.isConnected(workspaceId);
+        return await this.defaultProvider.isConnected(mapKeyOrWorkspaceId);
       } catch (err) {
         return false;
       }
@@ -136,6 +146,9 @@ export class WhatsAppService {
    * Desconectar
    */
   async disconnect(workspaceId: string): Promise<void> {
+    // Remove provider listeners for this workspace to avoid cross-workspace leaks
+    this.removeProviderListenersForWorkspace(workspaceId);
+
     await this.defaultProvider.disconnect(workspaceId);
 
     await this.prisma.whatsAppSettings.update({
@@ -153,7 +166,9 @@ export class WhatsAppService {
    * Enviar mensagem de texto
    */
   async sendText(workspaceId: string, to: string, text: string) {
-    const isConnected = await this.isConnected(workspaceId);
+    const mapKey = workspaceId; // may already be mapKey (workspace:session) from controller
+    const wsId = this.extractWorkspaceId(mapKey);
+    const isConnected = await this.isConnected(mapKey);
     if (!isConnected) {
       throw new Error('WhatsApp não está conectado');
     }
@@ -162,10 +177,10 @@ export class WhatsAppService {
     // Upsert lead
     const phoneNumber = this.normalizePhoneNumber(to);
     const lead = await this.prisma.lead.upsert({
-      where: { workspaceId_phoneNumber: { workspaceId, phoneNumber } },
+      where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber } },
       update: {},
       create: {
-        workspaceId,
+        workspaceId: wsId,
         phoneNumber,
         name: phoneNumber,
         origin: 'whatsapp_outgoing',
@@ -176,7 +191,7 @@ export class WhatsAppService {
 
     // Criar ou atualizar conversa
     let existingConversation = await this.prisma.conversation.findFirst({
-      where: { workspaceId, leadId: lead.id, groupId: null },
+      where: { workspaceId: wsId, leadId: lead.id, groupId: null },
     });
 
     const messageDateNow = new Date();
@@ -199,7 +214,7 @@ export class WhatsAppService {
     const optimistic = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
-        workspaceId,
+        workspaceId: wsId,
         whatsappMessageId: null,
         direction: 'OUTGOING',
         text,
@@ -513,13 +528,15 @@ export class WhatsAppService {
    * Listar contatos do WhatsApp conectado
    */
   async listGroups(workspaceId: string) {
-    const isConnected = await this.isConnected(workspaceId);
+    const mapKey = workspaceId;
+    const wsId = this.extractWorkspaceId(mapKey);
+    const isConnected = await this.isConnected(mapKey);
     if (!isConnected) {
       throw new Error('WhatsApp não está conectado');
     }
 
     try {
-      const groups = await this.prisma.group.findMany({ where: { workspaceId } });
+      const groups = await this.prisma.group.findMany({ where: { workspaceId: wsId } });
       return groups.map((g: any) => ({
         id: g.id,
         name: g.name,
@@ -533,14 +550,16 @@ export class WhatsAppService {
   }
 
   async listContacts(workspaceId: string) {
-    const isConnected = await this.isConnected(workspaceId);
+    const mapKey = workspaceId;
+    const wsId = this.extractWorkspaceId(mapKey);
+    const isConnected = await this.isConnected(mapKey);
     if (!isConnected) {
       throw new Error('WhatsApp não está conectado');
     }
 
-    const providerContacts = await this.defaultProvider.listContacts(workspaceId);
+    const providerContacts = await this.defaultProvider.listContacts(mapKey);
     const leads = await this.prisma.lead.findMany({
-      where: { workspaceId },
+      where: { workspaceId: wsId },
       select: { id: true, name: true, phoneNumber: true },
       orderBy: { createdAt: 'desc' },
       take: 500,
@@ -555,7 +574,7 @@ export class WhatsAppService {
       if (!rawPhone) return;
       const key = this.normalizePhoneNumber(String(rawPhone));
       if (contact.id && String(contact.id).includes('@')) {
-        this.rememberJid(workspaceId, String(contact.id));
+        this.rememberJid(mapKey, String(contact.id));
       }
       byPhone.set(key, {
         id: contact.id,
@@ -698,111 +717,116 @@ export class WhatsAppService {
   /**
    * Configurar listeners no provider por workspace
    */
-  private setupEventListenersForWorkspace(workspaceId: string): void {
-    // QR Code
-    this.defaultProvider.on(
-      workspaceId,
-      'qr',
-      (payload: any) => {
-        const key = `${workspaceId}:qr`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de qr:`, error);
-          }
-        });
-      },
-    );
+  private setupEventListenersForWorkspace(mapKey: string): void {
 
-    // Connection status
-    this.defaultProvider.on(
-      workspaceId,
-      'connection_status',
-      (payload: any) => {
-        const key = `${workspaceId}:connection_status`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de connection_status:`, error);
-          }
-        });
-        // Also handle internal status
-        this.handleConnectionStatus(workspaceId, payload);
-      },
-    );
+    // Avoid multiple registrations for the same sessionKey
+    if (this.registeredWorkspaces.has(mapKey)) return;
 
-    // Message received
-    this.defaultProvider.on(
-      workspaceId,
-      'message_received',
-      (payload: any) => {
-        const key = `${workspaceId}:message_received`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de message_received:`, error);
-          }
-        });
-        // Also handle internal
-        this.handleMessageReceived(workspaceId, payload);
-      },
-    );
+    const handlers: Record<string, Function> = {};
 
-    // Message status
-    this.defaultProvider.on(
-      workspaceId,
-      'message_status',
-      (payload: any) => {
-        const key = `${workspaceId}:message_status`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de message_status:`, error);
-          }
-        });
-        // Also handle internal
-        this.handleMessageStatus(workspaceId, payload);
-      },
-    );
+    const workspaceId = String(mapKey).split(':')[0];
 
-    // Message sent
-    this.defaultProvider.on(
-      workspaceId,
-      'message_sent',
-      (payload: any) => {
-        const key = `${workspaceId}:message_sent`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de message_sent:`, error);
-          }
-        });
-        // Also handle internal
-        this.handleMessageSent(workspaceId, payload);
-      },
-    );
+    handlers['qr'] = (payload: any) => {
+      const key = `${mapKey}:qr`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de qr:`, error);
+        }
+      });
+    };
 
-    // Poll update
-    this.defaultProvider.on(
-      workspaceId,
-      'poll_update',
-      (payload: any) => {
-        const key = `${workspaceId}:poll_update`;
-        this.eventCallbacks.get(key)?.forEach((callback) => {
-          try {
-            callback(payload);
-          } catch (error) {
-            this.logger.error(`Erro ao executar callback de poll_update:`, error);
-          }
-        });
-        this.handlePollUpdate(workspaceId, payload);
-      },
-    );
+    handlers['connection_status'] = (payload: any) => {
+      const key = `${mapKey}:connection_status`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de connection_status:`, error);
+        }
+      });
+      this.handleConnectionStatus(workspaceId, payload);
+    };
+
+    handlers['message_received'] = (payload: any) => {
+      const key = `${mapKey}:message_received`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de message_received:`, error);
+        }
+      });
+      // Remember jid scoped by session (mapKey) to preserve isolation
+      try {
+        const from = payload?.from || null;
+        const participant = payload?.participant || null;
+        if (participant) this.rememberJid(mapKey, participant);
+        if (from) this.rememberJid(mapKey, from);
+      } catch (e) {}
+      this.handleMessageReceived(workspaceId, payload);
+    };
+
+    handlers['message_status'] = (payload: any) => {
+      const key = `${mapKey}:message_status`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de message_status:`, error);
+        }
+      });
+      this.handleMessageStatus(workspaceId, payload);
+    };
+
+    handlers['message_sent'] = (payload: any) => {
+      const key = `${mapKey}:message_sent`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de message_sent:`, error);
+        }
+      });
+      this.handleMessageSent(workspaceId, payload);
+    };
+
+    handlers['poll_update'] = (payload: any) => {
+      const key = `${mapKey}:poll_update`;
+      this.eventCallbacks.get(key)?.forEach((callback) => {
+        try {
+          callback(payload);
+        } catch (error) {
+          this.logger.error(`Erro ao executar callback de poll_update:`, error);
+        }
+      });
+      this.handlePollUpdate(workspaceId, payload);
+    };
+
+    // Register handlers on provider
+    Object.keys(handlers).forEach((event) => {
+      this.defaultProvider.on(mapKey, event, handlers[event] as any);
+    });
+
+    this.providerHandlers.set(mapKey, handlers);
+    this.registeredWorkspaces.add(mapKey);
+  }
+
+  private removeProviderListenersForWorkspace(mapKey: string): void {
+    if (!this.registeredWorkspaces.has(mapKey)) return;
+    const handlers = this.providerHandlers.get(mapKey) || {};
+    Object.keys(handlers).forEach((event) => {
+      try {
+        this.defaultProvider.off(mapKey, event, handlers[event] as any);
+      } catch (e) {
+        const msg = (e as any)?.message ? (e as any).message : String(e);
+        this.logger.warn(`Erro ao remover provider handler ${event} para ${mapKey}: ${msg}`);
+      }
+    });
+    this.providerHandlers.delete(mapKey);
+    this.registeredWorkspaces.delete(mapKey);
+    this.logger.info(`Provider handlers removed for ${mapKey}`);
   }
 
   /**

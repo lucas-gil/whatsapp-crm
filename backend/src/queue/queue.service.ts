@@ -104,8 +104,9 @@ export class QueueService {
 export class BroadcastProducer {
   constructor(private queueService: QueueService) {}
 
-  async enqueueBroadcast(broadcastId: string, recipientBatch: any[]) {
+  async enqueueBroadcast(mapKey: string | null, broadcastId: string, recipientBatch: any[]) {
     return this.queueService.enqueueJob('broadcast', {
+      mapKey,
       broadcastId,
       recipients: recipientBatch,
     });
