@@ -548,33 +548,45 @@ export class WhatsAppService {
 
     const byPhone = new Map<string, any>();
     const recentJids = this.recentJids.get(workspaceId) || new Map();
+
+    // Normalize provider contacts into a digits-only key to ensure matching
     providerContacts.forEach((contact: any) => {
-      if (!contact?.phoneNumber) return;
+      const rawPhone = contact?.phoneNumber || (contact?.id ? String(contact.id).split('@')[0] : null);
+      if (!rawPhone) return;
+      const key = this.normalizePhoneNumber(String(rawPhone));
       if (contact.id && String(contact.id).includes('@')) {
         this.rememberJid(workspaceId, String(contact.id));
       }
-      byPhone.set(contact.phoneNumber, contact);
+      byPhone.set(key, {
+        id: contact.id,
+        name: contact.name || key,
+        phoneNumber: key,
+        jid: contact.id && String(contact.id).includes('@') ? String(contact.id) : null,
+      });
     });
 
+    // Merge leads (DB) where provider didn't already provide a contact
     leads.forEach((lead) => {
-      if (!byPhone.has(lead.phoneNumber)) {
-        byPhone.set(lead.phoneNumber, {
+      const key = this.normalizePhoneNumber(lead.phoneNumber || '');
+      if (!byPhone.has(key)) {
+        byPhone.set(key, {
           id: lead.id,
-          name: lead.name || lead.phoneNumber,
-          phoneNumber: lead.phoneNumber,
-          jid: recentJids.get(lead.phoneNumber) || null,
+          name: lead.name || key,
+          phoneNumber: key,
+          jid: recentJids.get(key) || null,
         });
       }
     });
 
-    return Array.from(byPhone.values()).map((contact) => {
-      if (!contact?.jid && contact?.id && String(contact.id).includes('@')) {
-        return { ...contact, jid: contact.id };
-      }
-      return contact;
-    }).sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'),
-    );
+    // Convert map to array and ensure jid fallback
+    return Array.from(byPhone.values())
+      .map((contact) => {
+        if (!contact?.jid && contact?.id && String(contact.id).includes('@')) {
+          return { ...contact, jid: contact.id };
+        }
+        return contact;
+      })
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
   }
 
   async getProfilePicture(workspaceId: string, target: string) {
@@ -1802,7 +1814,13 @@ export class WhatsAppService {
   }
 
   private normalizePhoneNumber(jid: string): string {
-    return jid.replace(/@s\.whatsapp\.net|@g\.us|@lid/g, '');
+    if (!jid) return '';
+    let v = String(jid);
+    // Remove jid domains like @s.whatsapp.net, @g.us, @lid
+    v = v.replace(/@s\.whatsapp\.net|@g\.us|@lid/gi, '');
+    // Remove any non-digit characters (plus signs, spaces, punctuation)
+    v = v.replace(/\D/g, '');
+    return v;
   }
 
   private normalizeTimestamp(timestamp: any): Date {

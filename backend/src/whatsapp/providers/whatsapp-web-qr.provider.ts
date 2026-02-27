@@ -21,6 +21,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
   private connectionRetries: Map<string, number> = new Map(); // Track retries
   private connectionStatus: Map<string, string> = new Map(); // Track connection status per workspace
   private contacts: Map<string, any[]> = new Map();
+  private sendQueues: Map<string, Promise<any>> = new Map();
 
   constructor(private configService: ConfigService) {
     const configuredPath =
@@ -477,7 +478,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
 
     try {
       const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
-      const response = await this.sendMessageWithRetries(socket, jid, { text });
+      const response = await this.enqueueSend(workspaceId, () => this.sendMessageWithRetries(socket, jid, { text }));
       const messageId = response.key.id;
       // Tenta extrair timestamp retornado pelo Baileys
       const ts =
@@ -525,7 +526,7 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
         messagePayload.caption = caption;
       }
 
-      const response = await this.sendMessageWithRetries(socket, jid, messagePayload);
+      const response = await this.enqueueSend(workspaceId, () => this.sendMessageWithRetries(socket, jid, messagePayload));
       const messageId = response.key.id;
       const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
       this.logger.info(`📎 Mídia enviada para ${to}: ${messageId} (ts=${ts})`);
@@ -552,12 +553,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       this.logger.info(
         `🧪 Enviando enquete: jid=${jid} options=${options.length} question=${question.substring(0, 40)}`,
       );
-      const response = await this.sendMessageWithRetries(socket, jid, {
-        poll: {
-          name: question,
-          values: options,
-        },
-      });
+      const response = await this.enqueueSend(
+        workspaceId,
+        () => this.sendMessageWithRetries(socket, jid, {
+          poll: {
+            name: question,
+            values: options,
+          },
+        }),
+      );
       const messageId = response.key.id;
       const ts = (response as any)?.messageTimestamp || (response as any)?.message?.timestamp || Date.now();
       this.logger.info(`🗳️ Enquete enviada para ${to}: ${messageId} (ts=${ts})`);
@@ -599,6 +603,15 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
     // Após tentativas, lançar último erro
     this.logger.error(`Falha depois de ${maxAttempts} tentativas ao enviar para ${jid}: ${lastError?.message || String(lastError)}`);
     throw lastError;
+  }
+
+  // Ensure sends are serialized per workspace to avoid concurrent socket issues
+  private async enqueueSend(workspaceId: string, fn: () => Promise<any>): Promise<any> {
+    const prev = this.sendQueues.get(workspaceId) || Promise.resolve();
+    const next = prev.then(() => fn()).catch((e) => { throw e; });
+    // Prevent unhandled rejection by attaching catch
+    this.sendQueues.set(workspaceId, next.catch(() => {}));
+    return next;
   }
 
   async listGroups(workspaceId: string): Promise<any[]> {
