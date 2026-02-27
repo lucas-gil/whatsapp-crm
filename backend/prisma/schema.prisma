@@ -165,6 +165,8 @@ model Lead {
   // Dados adicionais
   customFields    Json?       // dados customizados do cliente
   notes           String?
+  // Source: 'whatsapp' when created/synced from a real WhatsApp provider
+  source          String?     @default("unknown")
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -349,6 +351,8 @@ model Group {
   // Relations
   conversations   Conversation[]
   broadcasts      BroadcastRecipient[]
+  // Source: 'whatsapp' when group was created from provider data
+  source          String?     @default("unknown")
 
   @@index([workspaceId])
   @@index([whatsappGroupId])

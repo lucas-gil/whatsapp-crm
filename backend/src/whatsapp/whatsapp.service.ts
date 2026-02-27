@@ -675,6 +675,7 @@ export class WhatsAppService {
             origin: 'whatsapp_sync',
             optIn: true,
             optInDate: new Date(),
+            source: 'whatsapp',
           },
         });
         created += 1;
@@ -1009,6 +1010,7 @@ export class WhatsAppService {
                 phoneNumber: participantPhone,
                 name: pushName || participantPhone,
                 origin: 'whatsapp_group',
+                source: 'whatsapp',
               },
             });
           }
@@ -1024,6 +1026,7 @@ export class WhatsAppService {
               workspaceId,
               name: groupJid,
               whatsappGroupId: groupJid,
+              source: 'whatsapp',
             },
           });
         }
@@ -1114,6 +1117,7 @@ export class WhatsAppService {
             phoneNumber,
             name: phoneNumber,
             origin: 'whatsapp_incoming',
+            source: 'whatsapp',
           },
         });
       }
@@ -1319,6 +1323,7 @@ export class WhatsAppService {
               workspaceId,
               name: to,
               whatsappGroupId: to,
+              source: 'whatsapp',
             },
           });
         }
