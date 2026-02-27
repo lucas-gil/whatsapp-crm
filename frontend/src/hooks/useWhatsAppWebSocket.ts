@@ -51,6 +51,12 @@ export function useWhatsAppWebSocket(token: string | null) {
         base = `${apiBase}/whatsapp`;
       }
 
+      // Prevent accidental fallback to localhost in production builds
+      if (process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/.test(base)) {
+        console.error('WebSocket base resolves to localhost in production - aborting connection');
+        return;
+      }
+
       console.log('Connecting WebSocket to', base);
 
       const socketIo = io(base, {

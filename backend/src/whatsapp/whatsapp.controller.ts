@@ -78,13 +78,26 @@ export class WhatsAppController {
     const workspaceId = req.user.workspaceId;
     const sessionId = req.user.sessionId || null;
     const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
-    const connected = await this.whatsAppService.isConnected(mapKey);
 
-    return {
-      connected,
-      status: connected ? 'connected' : 'disconnected',
-      timestamp: new Date(),
-    };
+    try {
+      const connected = await this.whatsAppService.isConnected(mapKey);
+      const state = connected ? 'connected' : 'disconnected';
+
+      // Return standardized status shape
+      return {
+        connected,
+        state,
+        me: null, // optional: provider 'me' info not available in minimal implementation
+        lastChangeAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      return {
+        connected: false,
+        state: 'disconnected',
+        me: null,
+        lastChangeAt: new Date().toISOString(),
+      };
+    }
   }
 
   /**
@@ -180,7 +193,28 @@ export class WhatsAppController {
   @Get('contacts')
   async listContacts(@Request() req: any) {
     const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
-    return this.whatsAppService.listContacts(mapKey);
+    try {
+      const providerContacts = await this.whatsAppService.listContacts(mapKey);
+
+      // Normalize into the required shape
+      const normalized = (providerContacts || []).map((c: any) => ({
+        id: c.id || c.jid || c.phoneNumber,
+        jid: c.id || c.jid || null,
+        type: c.id && String(c.id).endsWith('@g.us') ? 'group' : 'contact',
+        displayName: c.displayName || c.name || c.notify || c.phoneNumber || c.phoneNumber,
+        phone: c.phoneNumber || null,
+        profilePicUrl: c.profilePicUrl || null,
+      }));
+
+      return normalized;
+    } catch (err: any) {
+      // If not connected, return empty list (UI should show "Conecte o WhatsApp")
+      const msg = err?.message || String(err);
+      if (/not connected|nao esta conectado|WhatsApp não está conectado/i.test(msg)) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   /**
@@ -193,8 +227,24 @@ export class WhatsAppController {
     }
 
     const mapKey = req.user.sessionId ? `${req.user.workspaceId}:${req.user.sessionId}` : req.user.workspaceId;
-    const url = await this.whatsAppService.getProfilePicture(mapKey, to);
-    return { url };
+    try {
+      const url = await this.whatsAppService.getProfilePicture(mapKey, to);
+      if (!url) {
+        return {
+          error: true,
+          code: 'PROFILE_PIC_NOT_FOUND',
+          message: 'Foto de perfil não encontrada',
+        };
+      }
+      return { url };
+    } catch (err: any) {
+      const msg = err?.message || String(err || 'Erro desconhecido');
+      if (/not connected|nao esta conectado|WhatsApp não está conectado/i.test(msg)) {
+        throw new BadRequestException({ error: true, code: 'WHATSAPP_NOT_CONNECTED', message: 'WhatsApp não está conectado' });
+      }
+      // Generic failure -> return structured JSON with 500
+      throw new BadRequestException({ error: true, code: 'PROFILE_PIC_ERROR', message: msg });
+    }
   }
 
   /**

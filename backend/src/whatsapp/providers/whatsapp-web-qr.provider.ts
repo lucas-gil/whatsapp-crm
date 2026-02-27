@@ -762,13 +762,17 @@ export class WhatsAppWebQRProvider implements WhatsAppProvider {
       .map((contact) => {
         const id = String(contact.id);
         const phoneNumber = id.split('@')[0];
-        const name =
-          contact.name || contact.notify || contact.verifiedName || phoneNumber;
+        // Prefer saved contact name > notify (pushname) > verifiedName > phone
+        const savedName = contact.name || null;
+        const notify = (contact.notify || contact.pushname || contact.pushName) || null;
+        const verified = contact.verifiedName || null;
+        const displayName = savedName || notify || verified || phoneNumber;
 
         return {
           id,
           phoneNumber,
-          name,
+          name: savedName || null,
+          displayName,
         };
       });
   }

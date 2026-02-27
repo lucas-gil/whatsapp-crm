@@ -124,23 +124,23 @@ export class WhatsAppService {
 
   async isConnected(mapKeyOrWorkspaceId: string): Promise<boolean> {
     const wsId = this.extractWorkspaceId(mapKeyOrWorkspaceId);
-    try {
-      // Prefer DB state when possible (based on workspace id)
-      const settings = await this.prisma.whatsAppSettings.findUnique({ where: { workspaceId: wsId } });
-      if (settings?.isConnected) return true;
-    } catch (err) {
-      // ignore
-    }
-
+    // Prefer provider's runtime state when available so UI reflects real connection
     if (this.defaultProvider && typeof this.defaultProvider.isConnected === 'function') {
       try {
-        return await this.defaultProvider.isConnected(mapKeyOrWorkspaceId);
+        const prov = await this.defaultProvider.isConnected(mapKeyOrWorkspaceId);
+        if (prov) return true;
+        // If provider says false, fallthrough to check DB (to handle edge cases)
       } catch (err) {
-        return false;
+        // ignore and fallback to DB
       }
     }
 
-    return false;
+    try {
+      const settings = await this.prisma.whatsAppSettings.findUnique({ where: { workspaceId: wsId } });
+      return !!settings?.isConnected;
+    } catch (err) {
+      return false;
+    }
   }
 
   /**
