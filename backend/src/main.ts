@@ -21,12 +21,46 @@ import { PrismaService } from './prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { nanoid } from 'nanoid';
 
+// Small Redis health/auth check to fail fast with clear instructions when NOAUTH occurs
+async function checkRedisAuth(): Promise<void> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return;
+
+  try {
+    const { createClient } = await import('redis');
+    const client = createClient({ url: redisUrl, socket: { connectTimeout: 2000 } });
+    client.on('error', () => {});
+    // Try connect -> ping -> quit quickly
+    await client.connect();
+    await client.ping();
+    await client.quit();
+    console.log('✅ Redis connection OK');
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (/NOAUTH|WRONGPASS|Authentication required/i.test(msg)) {
+      console.error('\n❌ Redis authentication error detected (NOAUTH).');
+      console.error('   O backend está configurado para usar um Redis com senha, mas a autenticação falhou.');
+      console.error('   Corrija definindo as variáveis de ambiente: REDIS_PASSWORD e/ou REDIS_URL com credenciais.');
+      console.error('   Exemplo: REDIS_URL=redis://:MINHA_SENHA@redis:6379');
+      console.error('   Teste com: redis-cli -h <host> -p <port> -a <senha> ping');
+      console.error('   Processo será encerrado para evitar comportamento inconsistente.\n');
+      process.exit(1);
+    }
+
+    // If other error (timeout/unavailable), warn but allow startup
+    console.warn('⚠️ Redis check failed (continuando startup):', msg);
+  }
+}
+
 async function bootstrap() {
   try {
     console.log('🔍 Iniciando aplicação...');
     console.log(`📌 DATABASE_URL: ${process.env.DATABASE_URL ? '✅ configurada' : '❌ NÃO configurada'}`);
     console.log(`📌 JWT_SECRET: ${process.env.JWT_SECRET ? '✅ configurado' : '❌ NÃO configurado'}`);
     console.log(`📌 NODE_ENV: ${process.env.NODE_ENV || 'não definida'}`);
+
+    // Fail-fast Redis auth check to provide clear instructions when misconfigured
+    await checkRedisAuth();
 
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);

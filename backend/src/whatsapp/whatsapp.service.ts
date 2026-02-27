@@ -64,7 +64,7 @@ export class WhatsAppService {
   /**
    * Inicializa a conexão WhatsApp
    */
-  async initializeWorkspace(workspaceId: string, sessionId?: string) {
+  async initializeWorkspace(workspaceId: string, sessionId?: string, options: { forceNewSession?: boolean } = {}) {
     const mapKey = sessionId ? `${workspaceId}:${sessionId}` : workspaceId;
     try {
       this.logger.info(`🔄 Inicializando WhatsApp para workspace: ${workspaceId} session=${sessionId || 'default'}`);
@@ -84,7 +84,8 @@ export class WhatsAppService {
 
       // Inicializar provider para this sessão (mapKey)
       this.logger.info(`📱 Iniciando sessão Baileys para ${mapKey}...`);
-      await this.defaultProvider.initSession(mapKey, { forceNewSession: true });
+      // Apenas forçar nova sessão quando explicitamente solicitado
+      await this.defaultProvider.initSession(mapKey, { forceNewSession: !!options.forceNewSession });
 
       this.logger.info(`✅ Sessão Baileys inicializada`);
 

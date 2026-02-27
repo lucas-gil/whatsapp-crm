@@ -32,7 +32,7 @@ export class WhatsAppController {
       }
 
       const sessionId = req.user.sessionId || null;
-      const settings = await this.whatsAppService.initializeWorkspace(workspaceId, sessionId);
+      const settings = await this.whatsAppService.initializeWorkspace(workspaceId, sessionId, { forceNewSession: true });
       return {
         status: 'initializing',
         message: 'Escaneie o código QR com seu WhatsApp',
