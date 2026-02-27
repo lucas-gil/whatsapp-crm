@@ -27,9 +27,25 @@ export function useWhatsAppWebSocket(token: string | null) {
     if (!token) return;
 
     try {
-      const base = 'https://webot-app.4ziatk.easypanel.host';
-      const socketIo = io(`${base}/whatsapp`, {
+      const envWs = process.env.NEXT_PUBLIC_WS_URL || '';
+      const envApi = process.env.NEXT_PUBLIC_API_URL || '';
+      const clientOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+      // If NEXT_PUBLIC_WS_URL is provided, treat it as the full socket URL (may include namespace).
+      // Otherwise build URL from NEXT_PUBLIC_API_URL or the current origin and append the namespace.
+      let base = '';
+      if (envWs && envWs.trim() !== '') {
+        base = envWs.replace(/\/$/, '');
+      } else {
+        const apiBase = (envApi || clientOrigin).replace(/\/$/, '');
+        base = `${apiBase}/whatsapp`;
+      }
+
+      console.log('Connecting WebSocket to', base);
+
+      const socketIo = io(base, {
         path: '/socket.io',
+        transports: ['websocket'],
         query: {
           token,
         },

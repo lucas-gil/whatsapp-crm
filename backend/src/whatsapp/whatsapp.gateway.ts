@@ -27,7 +27,12 @@ export class WhatsAppGateway implements OnGatewayConnection, OnGatewayDisconnect
   ) {}
 
   handleConnection(client: Socket) {
-    this.logger.info(`Cliente conectado ao WebSocket: ${client.id}`);
+    // Log connection details to aid debugging when clients fail to connect
+    const tokenFromAuth = (client.handshake && (client.handshake.auth as any)?.token) || null;
+    const tokenFromQuery = (client.handshake && (client.handshake.query as any)?.token) || null;
+    const tokenPresent = tokenFromAuth || tokenFromQuery ? true : false;
+    this.logger.info(`Cliente conectado ao WebSocket: ${client.id} namespace=${client.nsp?.name} tokenPresent=${tokenPresent}`);
+    this.logger.info(`  handshake.headers=${JSON.stringify(client.handshake.headers || {})}`);
   }
 
   handleDisconnect(client: Socket) {
