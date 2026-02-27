@@ -18,8 +18,8 @@ RUN npx prisma generate || true
 
 RUN npm run build
 
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
+RUN groupadd -g 1001 nodejs || true && \
+    useradd -u 1001 -g nodejs -M -s /usr/sbin/nologin nodejs || true && \
     chown -R nodejs:nodejs /app
 
 RUN mkdir -p /app/storage /app/sessions
