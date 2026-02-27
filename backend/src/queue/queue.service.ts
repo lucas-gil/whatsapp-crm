@@ -18,6 +18,7 @@ export class QueueService {
   private workers: Map<string, Worker> = new Map();
   private redisUrl: string;
   private redisPassword?: string;
+  private disabledQueues: Set<string> = new Set();
 
   constructor(private configService: ConfigService) {
     this.redisUrl = this.configService.get('REDIS_URL', 'redis://localhost:6379');
@@ -30,15 +31,25 @@ export class QueueService {
     // We ensure `REDIS_URL` contains credentials earlier (see validation/main bootstrap).
     const connectionOptions: any = { url: this.redisUrl };
 
-    const queue = new Queue(config.name, {
-      connection: connectionOptions,
-    });
+    let queue: Queue;
+    let worker: Worker;
+    try {
+      queue = new Queue(config.name, {
+        connection: connectionOptions,
+      });
 
-    // Criar worker
-    const worker = new Worker(config.name, config.handler, {
-      connection: connectionOptions,
-      concurrency: 5,
-    });
+      // Criar worker
+      worker = new Worker(config.name, config.handler, {
+        connection: connectionOptions,
+        concurrency: 5,
+      });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      this.logger.error(`Falha ao registrar fila ${config.name}: ${msg}`);
+      // Disable this queue to avoid runtime exceptions later
+      this.disabledQueues.add(config.name);
+      return;
+    }
 
     // Listeners
     worker.on('completed', (job: any) => {
@@ -56,6 +67,10 @@ export class QueueService {
   }
 
   async enqueueJob(queueName: string, data: any, options?: any) {
+    if (this.disabledQueues.has(queueName)) {
+      throw new Error(`Fila ${queueName} está desabilitada (problema de conexão com Redis)`);
+    }
+
     const queue = this.queues.get(queueName);
     if (!queue) {
       throw new Error(`Fila ${queueName} não registrada`);
